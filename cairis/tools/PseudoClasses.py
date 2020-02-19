@@ -33,22 +33,25 @@ class CharacteristicReferenceSynopsis(object):
     "theSynopsis": fields.String,
     "theDimension": fields.String,
     "theActorType": fields.String,
-    "theActor": fields.String
+    "theActor": fields.String,
+    "theInitialSatisfaction" : fields.String
   }
   required = list(resource_fields.keys())
   required.remove(obj_id_field)
 
-  def __init__(self, rsName='', rsDim='', rsActorType='', rsActor=''):
+  def __init__(self, rsName='', rsDim='', rsActorType='', rsActor='', gSat=''):
     self.theSynopsis = rsName
     self.theDimension = rsDim
     self.theActorType = rsActorType
     self.theActor= rsActor
+    self.theInitialSatisfaction = gSat
 
   def __getitem__(self,varName):
     if (varName == 'theSynopsis'): return self.theSynopsis
     elif (varName == 'theDimension'): return self.theDimension
     elif (varName == 'theActorType'): return self.theActorType
     elif (varName == 'theActor'): return self.theActor
+    elif (varName == 'theInitialSatisfaction'): return self.theInitialSatisfaction
     else: return None
 
 class CharacteristicReferenceContribution(object):
@@ -529,3 +532,19 @@ class ObjectDependency(object):
     self.theDimensionName = dimension_name
     self.theObjectName = object_name
 
+class TaskGoalContribution(object):
+  resource_fields = {
+    obj_id_field: fields.String,
+    'theSource': fields.String,
+    'theDestination': fields.String,
+    'theEnvironment': fields.String,
+    'theContribution': fields.String,
+  }
+  required = list(resource_fields.keys())
+  required.remove(obj_id_field)
+
+  def __init__(self,src,dest,env,cont):
+    self.theSource = src 
+    self.theDestination = dest
+    self.theEnvironment = env
+    self.theContribution = cont

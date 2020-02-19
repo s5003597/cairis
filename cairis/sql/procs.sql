@@ -229,8 +229,11 @@ drop procedure if exists delete_requirement;
 drop procedure if exists detectionMechanisms;
 drop procedure if exists assetNames;
 drop procedure if exists entityNames;
+drop procedure if exists diagramEntityNames;
 drop procedure if exists datastoreNames;
+drop procedure if exists diagramDatastoreNames;
 drop procedure if exists processNames;
+drop procedure if exists diagramProcessNames;
 drop procedure if exists dfd_filterNames;
 drop procedure if exists classAssociationNames;
 drop procedure if exists goalAssociationNames;
@@ -580,6 +583,7 @@ drop function if exists durationLabel;
 drop function if exists frequencyLabel;
 drop procedure if exists usabilityToXml;
 drop procedure if exists misusabilityToXml;
+drop procedure if exists misusabilityToJSON;
 drop procedure if exists personaToXml;
 drop procedure if exists associationsToXml;
 drop procedure if exists projectToXml;
@@ -900,6 +904,7 @@ drop procedure if exists deleteDataFlow;
 drop procedure if exists getDataFlows;
 drop procedure if exists getDataFlowAssets;
 drop procedure if exists dataflowsToXml;
+drop procedure if exists dataflowsToJSON;
 drop procedure if exists dataFlowDiagram;
 drop procedure if exists addTrustBoundary;
 drop procedure if exists updateTrustBoundary;
@@ -949,6 +954,7 @@ drop function if exists trustBoundaryPrivilege;
 drop procedure if exists unrelatedExceptionCheck;
 drop procedure if exists reassociateRequirement;
 drop procedure if exists locationsToXml;
+drop procedure if exists locationsToJSON;
 drop procedure if exists implicitAssetInclusionCheck;
 drop procedure if exists implicitAssetVulnerabilityCheck;
 drop function if exists lastNumericRequirementLabel;
@@ -986,6 +992,31 @@ drop procedure if exists patternsToXml;
 drop procedure if exists inheritanceInconsistency;
 drop function if exists isClassAssociationPresent;
 drop procedure if exists isTracePresent;
+drop procedure if exists associationsToJSON;
+drop procedure if exists getUserGoals;
+drop procedure if exists addUserGoal;
+drop procedure if exists updateUserGoal;
+drop procedure if exists getGoalContributions;
+drop procedure if exists userGoalContribution;
+drop procedure if exists calculateGoalScore;
+drop procedure if exists addTaskContribution;
+drop procedure if exists updateTaskContribution;
+drop procedure if exists ugm_filterNames;
+drop procedure if exists delete_user_goal;
+drop procedure if exists getGoalContributionsTable;
+drop procedure if exists deleteGoalContribution;
+drop procedure if exists document_reference_synopsisNames;
+drop procedure if exists getTaskContributions;
+drop procedure if exists user_goalNames;
+drop procedure if exists userGoalLoopCheck;
+drop procedure if exists inLoop;
+drop procedure if exists conflictingPersonaCharacteristics;
+drop procedure if exists obstructedGoalDependencies;
+drop procedure if exists deleteUserGoalComponents;
+drop procedure if exists addUserSystemGoalLink;
+drop procedure if exists userGoalSystemGoals;
+drop procedure if exists deniedUserGoalDependencies;
+drop procedure if exists isGoalDenied;
 
 
 delimiter //
@@ -2547,6 +2578,8 @@ begin
   delete from classassociation where head_id = assetId;
   delete from classassociation where tail_id = assetId;
   delete from asset_vulnerability where asset_id = assetId;
+  delete from task_concernassociation where source_id = assetId;
+  delete from task_concernassociation where target_id = assetId;
   delete from task_asset where asset_id = assetId;
   delete from countermeasure_asset where asset_id = assetId;
   delete from asset_requirement where asset_id = assetId;
@@ -3590,6 +3623,7 @@ begin
   delete from task_narrative where task_id = scId;
   delete from task_dependencies where task_id = scId;
   delete from task_concernassociation where task_id = scId;
+  delete from task_goal_contribution where task_id = scId;
 end
 //
 
@@ -3621,6 +3655,7 @@ begin
   close tcCursor;
 
   call deleteTaskComponents(tId);
+  delete from task_goal_contribution where task_id = tId;
   delete from requirement_task where task_id = tId;
   delete from task_asset where task_id = tId;
   delete from task_vulnerability where task_id = tId;
@@ -3916,6 +3951,8 @@ begin
     union
     select 'requirement',r.name from requirement r, environment_requirement er, environment e, requirement_task rt, environment_task et where er.environment_id = environmentId and r.version = (select max(i.version) from requirement i where i.id = r.id) and r.id = er.requirement_id and er.environment_id = e.id and rt.requirement_id = r.id and rt.task_id = et.task_id and et.environment_id = er.environment_id
     union
+    select 'requirement',r.name from requirement r, requirementgoal_goalassociation ga where ga.environment_id = environmentId and ga.goal_id = r.id and r.version = (select max(i.version) from requirement i where i.id = r.id)
+    union
     select 'usecase',u.name from usecase u, requirement_usecase ru, asset_requirement ar, environment_asset ea, environment_usecase eu  where eu.environment_id = environmentId and eu.usecase_id = ru.usecase_id and ru.usecase_id = u.id and ru.requirement_id = ar.requirement_id and ar.asset_id = ea.asset_id and ea.environment_id = eu.environment_id
     union
     select 'usecase',u.name from usecase u, requirement_usecase ru, environment_requirement er, environment e, environment_usecase eu  where eu.environment_id = environmentId and eu.usecase_id = ru.usecase_id and ru.usecase_id = u.id and ru.requirement_id = er.requirement_id and er.environment_id = e.id and er.environment_id = eu.environment_id
@@ -4210,7 +4247,11 @@ begin
     union
     select 'role',r.name from role r,rolegoalrole_dependency rgr where rgr.environment_id = environmentId and rgr.depender_id = r.id and r.id = roleId
     union
+    select 'role',r.name from role r,rolegoalrole_dependency rgr where rgr.environment_id = environmentId and rgr.depender_id = roleId and rgr.dependee.id and r.id = roleId
+    union
     select 'goal',g.name from goal g,rolegoalrole_dependency rgr where rgr.environment_id = environmentId and rgr.dependency_id = g.id and rgr.depender_id = roleId
+    union
+    select 'goal',g.name from goal g,rolegoalrole_dependency rgr where rgr.environment_id = environmentId and rgr.dependency_id = g.id and rgr.dependee_id = roleId
     union
     select 'role',r.name from role r,rolegoalrole_dependency rgr where rgr.environment_id = environmentId and rgr.dependee_id = r.id and r.id = roleId
     union
@@ -4536,6 +4577,14 @@ begin
 end
 //
 
+create procedure diagramEntityNames(in environmentName text)
+begin
+  select from_name from dataflows where environment = environmentName and from_type = 'entity'
+  union
+  select to_name from dataflows where environment = environmentName and to_type = 'entity';
+end
+//
+
 create procedure datastoreNames(in environmentName text)
 begin
   declare environmentId int;
@@ -4546,6 +4595,14 @@ begin
     select id into environmentId from environment where name = environmentName limit 1;
     select a.name from datastore a, environment_asset ca where ca.environment_id = environmentId and ca.asset_id = a.id order by 1;
   end if;
+end
+//
+
+create procedure diagramDatastoreNames(in environmentName text)
+begin
+  select from_name from dataflows where environment = environmentName and from_type = 'datastore'
+  union
+  select to_name from dataflows where environment = environmentName and to_type = 'datastore';
 end
 //
 
@@ -4562,6 +4619,14 @@ begin
 end
 //
 
+create procedure diagramProcessNames(in environmentName text)
+begin
+  select from_name from dataflows where environment = environmentName and from_type = 'process'
+  union
+  select to_name from dataflows where environment = environmentName and to_type = 'process';
+end
+//
+
 create procedure dfd_filterNames(in envName text)
 begin
   if envName != ''
@@ -4570,13 +4635,13 @@ begin
     union
     select from_name from dataflows where environment = envName
     union
-    select to_name from dataflows where environment = envName;
+    select to_name from dataflows where environment = envName order by 1;
   else
     select dataflow from dataflows
     union
     select from_name from dataflows
     union
-    select to_name from dataflows;
+    select to_name from dataflows order by 1;
   end if;
 end
 //
@@ -5513,6 +5578,7 @@ end
 create procedure delete_goal(in goalId int)
 begin
   call deleteGoalComponents(goalId);
+  delete from user_system_goal_link where system_goal_id = goalId;
   delete from goalrequirement_goalassociation where goal_id = goalId;
   delete from requirementgoal_goalassociation where subgoal_id = goalId;
   delete from goalrole_goalassociation where goal_id = goalId;
@@ -7264,15 +7330,27 @@ begin
     union
     select rg.id id,e.name environment,hg.name goal_name,'role' goal_dim,'depender' ref_type, tg.name subgoal_name,'goal' subgoal_dim,'0',rg.rationale from rolegoalrole_dependency rg, role hg, goal tg, environment e where rg.environment_id = environmentId and rg.depender_id = hg.id and rg.dependency_id = tg.id and rg.environment_id = e.id and hg.id = roleId
     union
+    select rg.id id,e.name environment,hg.name goal_name,'role' goal_dim,'depender' ref_type, tg.name subgoal_name,'goal' subgoal_dim,'0',rg.rationale from rolegoalrole_dependency rg, role hg, goal tg, environment e where rg.environment_id = environmentId and rg.depender_id = hg.id and rg.dependency_id = tg.id and rg.environment_id = e.id and rg.dependee_id = roleId
+    union
     select rt.id id,e.name environment,hg.name goal_name,'role' goal_dim,'depender' ref_type, tg.name subgoal_name,'task' subgoal_dim,'0',rt.rationale from roletaskrole_dependency rt, role hg, task tg, environment e where rt.environment_id = environmentId and rt.depender_id = hg.id and rt.dependency_id = tg.id and rt.environment_id = e.id and hg.id = roleId
+    union
+    select rt.id id,e.name environment,hg.name goal_name,'role' goal_dim,'depender' ref_type, tg.name subgoal_name,'task' subgoal_dim,'0',rt.rationale from roletaskrole_dependency rt, role hg, task tg, environment e where rt.environment_id = environmentId and rt.depender_id = hg.id and rt.dependency_id = tg.id and rt.environment_id = e.id and rt.dependee_id = roleId
     union
     select ra.id id,e.name environment,hg.name goal_name,'role' goal_dim,'depender' ref_type, tg.name subgoal_name,'asset' subgoal_dim,'0',ra.rationale from roleassetrole_dependency ra, role hg, asset tg, environment e where ra.environment_id = environmentId and ra.depender_id = hg.id and ra.dependency_id = tg.id and ra.environment_id = e.id and hg.id = roleId
     union
+    select ra.id id,e.name environment,hg.name goal_name,'role' goal_dim,'depender' ref_type, tg.name subgoal_name,'asset' subgoal_dim,'0',ra.rationale from roleassetrole_dependency ra, role hg, asset tg, environment e where ra.environment_id = environmentId and ra.depender_id = hg.id and ra.dependency_id = tg.id and ra.environment_id = e.id and ra.dependee_id = roleId
+    union
     select gr.id id,e.name environment,hg.name goal_name,'goal' goal_dim,'dependee' ref_type, tg.name subgoal_name,'role' subgoal_dim,'0',gr.rationale from rolegoalrole_dependency gr, goal hg, role tg, environment e where gr.environment_id = environmentId and gr.dependency_id = hg.id and gr.dependee_id = tg.id and gr.environment_id = e.id and tg.id = roleId
+    union
+    select gr.id id,e.name environment,hg.name goal_name,'goal' goal_dim,'dependee' ref_type, tg.name subgoal_name,'role' subgoal_dim,'0',gr.rationale from rolegoalrole_dependency gr, goal hg, role tg, environment e where gr.environment_id = environmentId and gr.dependency_id = hg.id and gr.dependee_id = tg.id and gr.environment_id = e.id and gr.depender_id = roleId
     union
     select tr.id id,e.name environment,hg.name goal_name,'task' goal_dim,'dependee' ref_type, tg.name subgoal_name,'role' subgoal_dim,'0',tr.rationale from roletaskrole_dependency tr, task hg, role tg, environment e where tr.environment_id = environmentId and tr.dependency_id = hg.id and tr.dependee_id = tg.id and tr.environment_id = e.id and tg.id = roleId
     union
-    select ar.id id,e.name environment,hg.name goal_name,'asset' goal_dim,'dependee' ref_type, tg.name subgoal_name,'role' subgoal_dim,'0',ar.rationale from roleassetrole_dependency ar, asset hg, role tg, environment e where ar.environment_id = environmentId and ar.dependency_id = hg.id and ar.dependee_id = tg.id and ar.environment_id = e.id and tg.id = roleId; 
+    select tr.id id,e.name environment,hg.name goal_name,'task' goal_dim,'dependee' ref_type, tg.name subgoal_name,'role' subgoal_dim,'0',tr.rationale from roletaskrole_dependency tr, task hg, role tg, environment e where tr.environment_id = environmentId and tr.dependency_id = hg.id and tr.dependee_id = tg.id and tr.environment_id = e.id and tr.depender_id = roleId
+    union
+    select ar.id id,e.name environment,hg.name goal_name,'asset' goal_dim,'dependee' ref_type, tg.name subgoal_name,'role' subgoal_dim,'0',ar.rationale from roleassetrole_dependency ar, asset hg, role tg, environment e where ar.environment_id = environmentId and ar.dependency_id = hg.id and ar.dependee_id = tg.id and ar.environment_id = e.id and tg.id = roleId
+    union
+    select ar.id id,e.name environment,hg.name goal_name,'asset' goal_dim,'dependee' ref_type, tg.name subgoal_name,'role' subgoal_dim,'0',ar.rationale from roleassetrole_dependency ar, asset hg, role tg, environment e where ar.environment_id = environmentId and ar.dependency_id = hg.id and ar.dependee_id = tg.id and ar.environment_id = e.id and ar.depender_id = roleId; 
   else
     select ga.id id,e.name environment,hg.name goal_name,'goal' goal_dim,rt.name ref_type,tg.name subgoal_name,'role' subgoal_dim,ga.alternative_id alternative_id,ga.rationale from goalrole_goalassociation ga, environment e, goal hg, reference_type rt, role tg where ga.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
     union
@@ -8406,9 +8484,12 @@ begin
   then
     set dimSql = concat('select id from ',dimTable,' where ');
 
-    if dimTable = 'persona_characteristic' or dimTable = 'task_characteristic'
+    if dimTable = 'persona_characteristic' or dimTable = 'task_characteristic' 
     then
       set dimSql = concat(dimSql,'description');
+    elseif dimTable = 'synopsis'
+    then
+      set dimSql = concat(dimSql,'synopsis');
     else
       set dimSql = concat(dimSql,'name');
     end if;
@@ -8460,6 +8541,9 @@ begin
   if dimensionTable = 'detection_mechanism'
   then
     set dimSql = 'select dm.asset_id, a.name from detection_mechanism dm, asset a where dm.asset_id = a.id order by 2';
+  elseif dimensionTable = 'requirement' and constraintId = -1
+  then
+    set dimSql = 'select o.id,o.name from requirement o where o.version = (select max(i.version) from requirement i where i.id = o.id)';
   else
     if dimensionTable = 'persona_characteristic'
     then
@@ -11142,7 +11226,7 @@ begin
   union
   select tr.name,'threat' dimension_name,t.name object_name,tr.description from threat_reference tr, threat t, persona_characteristic_threat pct, persona_characteristic pc where tr.threat_id = t.id and tr.id = pct.reference_id and pct.characteristic_id = pc.id and pc.persona_id = personaId
   union
-  select vr.name, 'risk', v.name,'vulnerability' dimension_name,v.name object_name,vr.description from vulnerability_reference vr, vulnerability v, persona_characteristic_vulnerability pcv, persona_characteristic pc where vr.vulnerability_id = v.id and vr.id = pcv.reference_id and pcv.characteristic_id = pc.id and pc.persona_id = personaId;
+  select vr.name, 'vulnerability' dimension_name,v.name object_name,vr.description from vulnerability_reference vr, vulnerability v, persona_characteristic_vulnerability pcv, persona_characteristic pc where vr.vulnerability_id = v.id and vr.id = pcv.reference_id and pcv.characteristic_id = pc.id and pc.persona_id = personaId;
 end
 //
 
@@ -11161,6 +11245,16 @@ create procedure delete_external_document(in docId int)
 begin
   if docId != -1
   then
+    delete from document_reference_contribution where reference_id in
+      (select id from document_reference_synopsis where reference_id in 
+        (select id from document_reference where document_id = docId)
+      );
+    delete from document_reference_contribution where characteristic_id in
+      (select id from document_reference_synopsis where reference_id in 
+        (select id from document_reference where document_id = docId)
+      );
+    delete from document_reference_synopsis where reference_id in (select id from document_reference where document_id = docId);
+    delete from document_reference where document_id = docId;
     delete from external_document where id = docId;
   else
     delete from external_document;
@@ -11173,6 +11267,8 @@ begin
   if refId != -1
   then
     delete from persona_characteristic_document where reference_id = refId;
+    delete from document_reference_contribution where reference_id in (select id from document_reference_synopsis where reference_id = refId);
+    delete from document_reference_contribution where characteristic_id in (select id from document_reference_synopsis where reference_id = refId);
     delete from document_reference_synopsis where reference_id = refId;
     delete from document_reference where id = refId;
   else
@@ -11723,6 +11819,10 @@ create procedure deletePersonaCharacteristicComponents(in pcId int)
 begin
     if pcId != -1
     then
+      delete from user_system_goal_link where user_goal_id = pcId;
+      delete from persona_characteristic_synopsis where characteristic_id = pcId;
+      delete from document_reference_synopsis where id in (select drc.reference_id from document_reference_contribution drc, persona_characteristic_document pcd where drc.characteristic_id = pcId and drc.characteristic_id = pcd.characteristic_id and pcd.reference_id = drc.reference_id);
+      delete from document_reference_contribution where characteristic_id = pcId and reference_id in (select reference_id from persona_characteristic_document where characteristic_id = pcId);
       delete from persona_characteristic_document where characteristic_id = pcId;
       delete from persona_characteristic_asset where characteristic_id = pcId;
       delete from persona_characteristic_attacker where characteristic_id = pcId;
@@ -12663,6 +12763,8 @@ begin
   declare isCritical int;
   declare ifName varchar(255);
   declare reqId int;
+  declare arName varchar(50);
+  declare privName varchar(50);
   declare ifType varchar(50);
   declare assetCr varchar(1000);
   declare cProperty varchar(50);
@@ -12722,7 +12824,7 @@ begin
   declare assocRationale longtext default '';
   declare buf LONGTEXT default '<?xml version="1.0"?>\n<!DOCTYPE riskanalysis PUBLIC "-//CAIRIS//DTD RISKANALYSIS 1.0//EN" "http://cairis.org/dtd/riskanalysis.dtd">\n\n<riskanalysis>\n';
   declare done int default 0;
-  declare assetIFCursor cursor for select i.name,ai.required_id from asset_interface ai, interface i where ai.asset_id = assetId and ai.interface_id = i.id;
+  declare assetIFCursor cursor for select i.name,ai.required_id,ar.name,p.name from asset_interface ai, interface i,access_right ar, privilege p where ai.asset_id = assetId and ai.interface_id = i.id and ai.access_right_id = ar.id and ai.privilege_id = p.id order by 1;
   declare assetTagCursor cursor for select t.name from asset_tag at, tag t where at.asset_id = assetId and at.tag_id = t.id;
   declare attackerTagCursor cursor for select t.name from attacker_tag at, tag t where at.attacker_id = attackerId and at.tag_id = t.id;
   declare vulTagCursor cursor for select t.name from vulnerability_tag vt, tag t where vt.vulnerability_id = vulId and vt.tag_id = t.id;
@@ -12795,7 +12897,7 @@ begin
 
     open assetIFCursor;
     assetIF_loop: loop
-      fetch assetIFCursor into ifName,reqId;
+      fetch assetIFCursor into ifName,reqId,arName,privName;
       if done = 1
       then
         leave assetIF_loop;
@@ -12806,7 +12908,7 @@ begin
       else
         set ifType = 'provided';
       end if;
-      set buf = concat(buf,'  <interface name=\"',ifName,'\" type=\"',ifType,'\" />\n');
+      set buf = concat(buf,'  <interface name=\"',ifName,'\" type=\"',ifType,'\" access_right="',arName,'" privilege="',privName,'" />\n');
     end loop assetIF_loop;
     close assetIFCursor;
     set done = 0;
@@ -14015,12 +14117,12 @@ begin
   declare frequencyValue varchar(50);
   declare demandsValue varchar(50);
   declare gcValue varchar(50);
-  declare concernName varchar(50);
-  declare sourceName varchar(50);
+  declare concernName varchar(100);
+  declare sourceName varchar(100);
   declare sourceNry varchar(10);
-  declare concernLink varchar(50);
+  declare concernLink varchar(100);
   declare targetNry varchar(10);
-  declare targetName varchar(50);
+  declare targetName varchar(100);
   declare tagName varchar(255);
 
   declare buf LONGTEXT default '<?xml version="1.0"?>\n<!DOCTYPE usability PUBLIC "-//CAIRIS//DTD USABILITY 1.0//EN" "http://cairis.org/dtd/usability.dtd">\n\n<usability>\n';
@@ -17059,16 +17161,18 @@ begin
   declare rsDim varchar(50);
   declare actorType varchar(50);
   declare actorName varchar(100);
+  declare synDim varchar(50);
+  declare gsName varchar(50);
 
   select id into refId from document_reference where name = refName;
   select id into rrRefId from requirement_reference where name = refName;
   if refId is not null
   then
-    select drs.id,drs.synopsis,td.name,td2.name,drs.actor_id into refSynId,refSyn,rsDim,actorType,actorId from document_reference_synopsis drs, trace_dimension td, trace_dimension td2 where drs.reference_id = refId and drs.dimension_id = td.id and drs.actor_type_id = td2.id;
+    select drs.id,drs.synopsis,td.name,td2.name,drs.actor_id,'document_reference',gs.name into refSynId,refSyn,rsDim,actorType,actorId,synDim,gsName from document_reference_synopsis drs, trace_dimension td, trace_dimension td2, goal_satisfaction gs where drs.reference_id = refId and drs.dimension_id = td.id and drs.actor_type_id = td2.id and drs.satisfaction = gs.id;
   elseif rrRefId is not null
   then
     set refId = rrRefId;
-    select rrs.id,rrs.synopsis,td.name,td2.name,rrs.actor_id into refSynId,refSyn,rsDim,actorType,actorId from requirement_reference_synopsis rrs, trace_dimension td, trace_dimension td2 where rrs.reference_id = refId and rrs.dimension_id = td.id and rrs.actor_type_id = td2.id;
+    select rrs.id,rrs.synopsis,td.name,td2.name,rrs.actor_id,'requirement','None' into refSynId,refSyn,rsDim,actorType,actorId,synDim,gsName from requirement_reference_synopsis rrs, trace_dimension td, trace_dimension td2 where rrs.reference_id = refId and rrs.dimension_id = td.id and rrs.actor_type_id = td2.id;
   else
     set refSynId = -1;
     set refSyn = '';
@@ -17087,7 +17191,7 @@ begin
     deallocate prepare stmt;
     set actorName = @actorName;
   end if;
-  select ifnull(refSynId,-1),ifnull(refSyn,''),ifnull(rsDim,''),ifnull(actorType,''),ifnull(actorName,'');
+  select ifnull(refSynId,-1),ifnull(refSyn,''),ifnull(rsDim,''),ifnull(actorType,''),ifnull(actorName,''),ifnull(synDim,''), ifnull(gsName,'None');
 end
 //
 
@@ -17117,16 +17221,21 @@ begin
 end
 //
 
-create procedure delete_reference_synopsis(in rsIdi int)
+create procedure delete_reference_synopsis(in rsId int)
 begin
   declare drsCount int;
 
+  call deleteUserGoalComponents(rsId);
+
   select count(id) into drsCount from document_reference_synopsis where id = rsId;
 
-  if refId > 0
+  if drsCount > 0
   then
+    delete from document_reference_contribution where reference_id = rsId;
+    delete from usecase_dr_contribution where reference_id = rsId;
     call delete_document_reference_synopsis(rsId);
   else
+    delete from requirement_reference_contribution where reference_id = rsId;
     call delete_requirement_reference_synopsis(rsId);
   end if;
 end
@@ -17135,6 +17244,7 @@ end
 create procedure delete_document_reference_synopsis(in rsId int)
 begin
   delete from document_reference_contribution where reference_id = rsId;
+  delete from task_goal_contribution where reference_id = rsId;
   delete from usecase_dr_contribution where reference_id = rsId;
   delete from document_reference_synopsis where id = rsId;
 end
@@ -17147,14 +17257,17 @@ begin
 end
 //
 
-create procedure addReferenceSynopsis(in rsId int, in refName text, in rsName text, in rsDim text, in atName text, in actorName text)
+create procedure addReferenceSynopsis(in rsId int, in refName text, in rsName text, in rsDim text, in atName text, in actorName text, in gSat text)
 begin
   declare dimId int;
   declare atId int;
   declare actorId int;
   declare refId int;
+  declare drsCount int;
   declare actorIdSql varchar(4000);
+  declare gsId int;
 
+  select id into gsId from goal_satisfaction where name = gSat;
   select id into dimId from trace_dimension where name = rsDim;
   select id into atId from trace_dimension where name = atName;
 
@@ -17168,7 +17281,13 @@ begin
   select id into refId from document_reference where name = refName;
   if refId is not null
   then
-    insert into document_reference_synopsis(id,reference_id,synopsis,dimension_id,actor_id,actor_type_id) values (rsId,refId,rsName,dimId,actorId,atId);
+    select count(id) into drsCount from document_reference_synopsis where reference_id = refId;
+    if drsCount > 0
+    then
+      update document_reference_synopsis set reference_id = refId, synopsis = rsName, dimension_id = dimId, actor_id = actorId, actor_type_id = atId, satisfaction = gsId where id = rsId;
+    else
+      insert into document_reference_synopsis(id,reference_id,synopsis,dimension_id,actor_id,actor_type_id,satisfaction) values (rsId,refId,rsName,dimId,actorId,atId,gsId);
+    end if;
   else
     select id into refId from requirement_reference where name = refName;
     insert into requirement_reference_synopsis(id,reference_id,synopsis,dimension_id,actor_id,actor_type_id) values (rsId,refId,rsName,dimId,actorId,atId);
@@ -17176,14 +17295,16 @@ begin
 end
 //
 
-create procedure updateReferenceSynopsis(in rsId int, in refName text, in rsName text, in rsDim text, in atName text, in actorName text)
+create procedure updateReferenceSynopsis(in rsId int, in refName text, in rsName text, in rsDim text, in atName text, in actorName text, in gSat text)
 begin
   declare dimId int;
   declare atId int;
   declare actorId int;
   declare refId int;
   declare actorIdSql varchar(4000);
+  declare gsId int;
 
+  select id into gsId from goal_satisfaction where name = gSat;
   select id into dimId from trace_dimension where name = rsDim;
   select id into atId from trace_dimension where name = atName;
 
@@ -17197,7 +17318,7 @@ begin
   select id into refId from document_reference where name = refName;
   if refId is not null
   then
-    update document_reference_synopsis set reference_id = refId, synopsis = rsName, dimension_id = dimId, actor_id = actorId, actor_type_id = atId where id = rsId;
+    update document_reference_synopsis set reference_id = refId, synopsis = rsName, dimension_id = dimId, actor_id = actorId, actor_type_id = atId, satisfaction = gsId where id = rsId;
   else
     select id into refId from requirement_reference where name = refName;
     update requirement_reference_synopsis set reference_id = refId, synopsis = rsName, dimension_id = dimId, actor_id = actorId, actor_type_id = atId where id = rsId;
@@ -17205,20 +17326,29 @@ begin
 end
 //
 
-create procedure addCharacteristicSynopsis(in cName text, in csName text, in csDim text,in atName text, in actorName text)
+create procedure addCharacteristicSynopsis(in cName text, in csName text, in csDim text,in atName text, in actorName text, in gSat text)
 begin
   declare cId int;
   declare dimId int;
   declare atId int;
   declare actorId int;
+  declare pcsCount int;
   declare actorIdSql varchar(4000);
+  declare gsId int;
 
   select id into dimId from trace_dimension where name = csDim;
+  select id into gsId from goal_satisfaction where name = gSat;
 
   select id into cId from persona_characteristic where description = cName;
   if cId is not null
   then
-    insert into persona_characteristic_synopsis(characteristic_id,synopsis,dimension_id) values (cId,csName,dimId);
+    select count(characteristic_id) into pcsCount from persona_characteristic_synopsis where synopsis = csName and dimension_id = dimId;
+    if pcsCount > 0
+    then
+      update persona_characteristic_synopsis set synopsis = csName,dimension_id = dimId, satisfaction = gsId where characteristic_id = cId;
+    else
+      insert into persona_characteristic_synopsis(characteristic_id,synopsis,dimension_id,satisfaction) values (cId,csName,dimId,gsId);
+    end if;
   else
     select id into cId from task_characteristic where description = cName;
     select id into atId from trace_dimension where name = atName;
@@ -17233,20 +17363,22 @@ begin
 end
 //
 
-create procedure updateCharacteristicSynopsis(in cName text, in csName text, in csDim text,in atName text, in actorName text)
+create procedure updateCharacteristicSynopsis(in cName text, in csName text, in csDim text,in atName text, in actorName text, in gSat text)
 begin
   declare cId int;
   declare dimId int;
   declare atId int;
   declare actorId int;
   declare actorIdSql varchar(4000);
+  declare gsId int;
 
   select id into dimId from trace_dimension where name = csDim;
+  select id into gsId from goal_satisfaction where name = gSat;
 
   select id into cId from persona_characteristic where description = cName;
   if cId is not null
   then
-    update persona_characteristic_synopsis set synopsis = csName,dimension_id = dimId where characteristic_id = cId;
+    update persona_characteristic_synopsis set synopsis = csName,dimension_id = dimId, satisfaction = gsId where characteristic_id = cId;
   else
     select id into cId from task_characteristic where description = cName;
     select id into atId from trace_dimension where name = atName;
@@ -17393,6 +17525,7 @@ begin
   declare charId int;
   declare meId int;
   declare lcId int;
+  declare drcCount int;
 
   select id into meId from contribution_end where name = meName;
   select id into lcId from link_contribution where name = contName;
@@ -17402,14 +17535,29 @@ begin
   then
     select characteristic_id into charId from task_characteristic_synopsis where synopsis = csName;
   end if;
+  if charId is null
+  then
+    select id into charId from document_reference_synopsis where synopsis = csName;
+  end if;
 
   select id into rsId from document_reference_synopsis where synopsis = rsName;
+  if rsId is null
+  then
+    select characteristic_id into rsId from persona_characteristic_synopsis where synopsis = rsName;
+  end if;
+  
   if rsId is null
   then
     select id into rsId from requirement_reference_synopsis where synopsis = rsName;
     insert into requirement_reference_contribution(reference_id,characteristic_id,end_id,contribution_id) values (rsId,charId,meId,lcId);
   else
-    insert into document_reference_contribution(reference_id,characteristic_id,end_id,contribution_id) values (rsId,charId,meId,lcId);
+    select count(*) into drcCount from document_reference_contribution where reference_id = rsId and characteristic_id = charId;
+    if drcCount > 0
+    then
+      update document_reference_contribution set end_id = meId, contribution_id = lcId where reference_id = rsId and characteristic_id = charId;
+    else
+      insert into document_reference_contribution(reference_id,characteristic_id,end_id,contribution_id) values (rsId,charId,meId,lcId);
+    end if;
   end if;
 end
 //
@@ -17429,8 +17577,17 @@ begin
   then
     select characteristic_id into charId from task_characteristic_synopsis where synopsis = csName;
   end if;
+  if charId is null
+  then
+    select id into charId from document_reference_synopsis where synopsis = csName;
+  end if;
 
   select id into rsId from document_reference_synopsis where synopsis = rsName;
+  if rsId is null
+  then
+    select characteristic_id into rsId from persona_characteristic_synopsis where synopsis = rsName;
+  end if;
+
   if rsId is null
   then
     select id into rsId from requirement_reference_synopsis where synopsis = rsName;
@@ -17439,9 +17596,6 @@ begin
     update document_reference_contribution set end_id = meId, contribution_id = lcId where reference_id = rsId and characteristic_id = charId;
 
   end if;
-
-
-
 end
 //
 
@@ -17474,6 +17628,8 @@ begin
   declare charId int;
   declare meId int;
   declare lcId int;
+  declare pcCount int;
+  declare drCount int;
 
   select id into ucId from usecase where name = ucName;
   select id into meId from contribution_end where name = meName;
@@ -17482,10 +17638,22 @@ begin
   select characteristic_id into charId from persona_characteristic_synopsis where synopsis = csName;
   if charId is not null
   then
-    insert into usecase_pc_contribution(usecase_id,characteristic_id,end_id,contribution_id) values (ucId,charId,meId,lcId);
+    select count(*) into pcCount from usecase_pc_contribution where usecase_id = ucId and characteristic_id = charId;
+    if pcCount > 0
+    then
+      update usecase_pc_contribution set end_id = meId, contribution_id = lcId where usecase_id = ucId and characteristic_id = charId;
+    else
+      insert into usecase_pc_contribution(usecase_id,characteristic_id,end_id,contribution_id) values (ucId,charId,meId,lcId);
+    end if;
   else
     select id into charId from document_reference_synopsis where synopsis = csName;
-    insert into usecase_dr_contribution(usecase_id,reference_id,end_id,contribution_id) values (ucId,charId,meId,lcId);
+    select count(*) into drCount from usecase_dr_contribution where usecase_id = ucId and characteristic_id = charId;
+    if drCount > 0
+    then
+      update usecase_dr_contribution set end_id = meId, contribution_id = lcId where usecase_id = ucId and reference_id = charId;
+    else
+      insert into usecase_dr_contribution(usecase_id,reference_id,end_id,contribution_id) values (ucId,charId,meId,lcId);
+    end if;
   end if;
 end
 //
@@ -19114,8 +19282,15 @@ end
 create procedure addComponentRequirement(in reqLabel int, in componentId int, in reqName text)
 begin
   declare reqId int;
+  declare crCount int;
+
   select id into reqId from template_requirement where name = reqName;
-  insert into component_template_requirement(template_requirement_id,component_id,label) values (reqId,componentId,reqLabel);
+
+  select count(*) into crCount from component_template_requirement where template_requirement_id = reqId and component_id = componentId;
+  if crCount = 0
+  then
+    insert into component_template_requirement(template_requirement_id,component_id,label) values (reqId,componentId,reqLabel);
+  end if;
 end
 //
 
@@ -19500,11 +19675,16 @@ create procedure addTemplateRequirement(in reqId int, in reqName text, in reqAss
 begin
   declare reqTypeId int;
   declare assetId int;
+  declare trCount int;
 
   select id into reqTypeId from requirement_type where name = reqType;
   select id into assetId from template_asset where name = reqAsset;
 
-  insert into template_requirement(id,name,type_id,description,rationale,fit_criterion,asset_id) values (reqId,reqName,reqTypeId,reqDesc,reqRat,reqFC,assetId);
+  select count(id) into trCount from template_requirement where name = reqName;
+  if trCount = 0
+  then
+    insert into template_requirement(id,name,type_id,description,rationale,fit_criterion,asset_id) values (reqId,reqName,reqTypeId,reqDesc,reqRat,reqFC,assetId);
+  end if;
 end
 //
 
@@ -20441,8 +20621,14 @@ end
 create procedure addComponentGoal(in componentId int, in goalName text)
 begin
   declare goalId int;
+  declare cgCount int;
   select id into goalId from template_goal where name = goalName;
-  insert into component_template_goal(template_goal_id,component_id) values (goalId,componentId);
+  
+  select count(*) into cgCount from component_template_goal where template_goal_id = goalId and component_id = componentId;
+  if cgCount = 0
+  then
+    insert into component_template_goal(template_goal_id,component_id) values (goalId,componentId);
+  end if;
 end
 //
 
@@ -20454,7 +20640,13 @@ end
 
 create procedure addTemplateGoal(in goalId int, in goalName text, in goalDef text, in goalRat text)
 begin
-  insert into template_goal(id,name,definition,rationale) values (goalId,goalName,goalDef,goalRat);
+  declare tgCount int;
+
+  select count(id) into tgCount from template_goal where name = goalName;
+  if tgCount = 0
+  then
+    insert into template_goal(id,name,definition,rationale) values (goalId,goalName,goalDef,goalRat);
+  end if;
 end
 //
 
@@ -20617,12 +20809,17 @@ begin
   declare goalId int;
   declare subGoalId int;
   declare refTypeId int;
+  declare cgaCount int;
 
   select id into goalId from template_goal where name = goalName;
   select id into subGoalId from template_goal where name = subGoalName;
   select id into refTypeId from reference_type where name = refType;
 
-  insert into component_goalgoal_goalassociation(component_id,goal_id,subgoal_id,ref_type_id,rationale) values(componentId,goalId,subGoalId,refTypeId,gaRationale);
+  select count(*) into cgaCount from component_goalgoal_goalassociation where component_id = componentId and goal_id = goalId and subgoal_id = subGoalId and ref_type_id = refTypeId;
+  if cgaCount = 0
+  then
+    insert into component_goalgoal_goalassociation(component_id,goal_id,subgoal_id,ref_type_id,rationale) values(componentId,goalId,subGoalId,refTypeId,gaRationale);
+  end if;
 end
 //
 
@@ -23977,7 +24174,7 @@ end
 
 create procedure persona_characteristic_synopsisNames() 
 begin
-  select synopsis from persona_characteristic_synopsis;
+  select synopsis from persona_characteristic_synopsis order by 1;
 end
 //
 
@@ -24097,27 +24294,27 @@ begin
   then
     select id into fromId from usecase where name = fromName limit 1;
     select id into toId from usecase where name = toName limit 1;
-    select dataflow_id into dfId from dataflow_process_process where from_id = fromId and to_id = toId limit 1;
+    select dpp.dataflow_id into dfId from dataflow_process_process dpp, dataflow df where dpp.from_id = fromId and dpp.to_id = toId and dpp.dataflow_id = df.id and df.environment_id = envId limit 1;
   elseif fromType = 'entity' and toType = 'process'
   then
     select id into fromId from asset where name = fromName limit 1;
     select id into toId from usecase where name = toName limit 1;
-    select dataflow_id into dfId from dataflow_entity_process where from_id = fromId and to_id = toId limit 1;
+    select dep.dataflow_id into dfId from dataflow_entity_process dep, dataflow df where dep.from_id = fromId and dep.to_id = toId and dep.dataflow_id = df.id and df.environment_id = envId limit 1;
   elseif fromType = 'process' and toType = 'entity'
   then
     select id into fromId from usecase where name = fromName limit 1;
     select id into toId from asset where name = toName limit 1;
-    select dataflow_id into dfId from dataflow_process_entity where from_id = fromId and to_id = toId limit 1;
+    select dpe.dataflow_id into dfId from dataflow_process_entity dpe, dataflow df where dpe.from_id = fromId and dpe.to_id = toId and dpe.dataflow_id = df.id and df.environment_id = envId limit 1;
   elseif fromType = 'datastore' and toType = 'process'
   then
     select id into fromId from asset where name = fromName limit 1;
     select id into toId from usecase where name = toName limit 1;
-    select dataflow_id into dfId from dataflow_datastore_process where from_id = fromId and to_id = toId limit 1;
+    select ddp.dataflow_id into dfId from dataflow_datastore_process ddp, dataflow df where ddp.from_id = fromId and ddp.to_id = toId and ddp.dataflow_id = df.id and df.environment_id = envId limit 1;
   elseif fromType = 'process' and toType = 'datastore'
   then
     select id into fromId from usecase where name = fromName limit 1;
     select id into toId from asset where name = toName limit 1;
-    select dataflow_id into dfId from dataflow_process_datastore where from_id = fromId and to_id = toId limit 1;
+    select dpd.dataflow_id into dfId from dataflow_process_datastore dpd, dataflow df where dpd.from_id = fromId and dpd.to_id = toId and dpd.dataflow_id = df.id and df.environment_id = envId limit 1;
   end if; 
 
   select id into assetId from asset where name = assetName limit 1;
@@ -24192,11 +24389,12 @@ begin
 
 end
 //
+
 create procedure dataflowsToXml(in includeHeader int)
 begin
   declare buf LONGTEXT default '<?xml version="1.0"?>\n<!DOCTYPE dataflows PUBLIC "-//CAIRIS//DTD DATAFLOW 1.0//EN" "http://cairis.org/dtd/dataflow.dtd">\n\n<dataflows>\n';
   declare done int default 0;
-  declare dfName varchar(50);
+  declare dfName varchar(255);
   declare envName varchar (200);
   declare fromName varchar (200);
   declare fromType varchar (9);
@@ -24299,17 +24497,27 @@ begin
 end
 //
 
-create procedure dataFlowDiagram(in envName text,in filterElement text)
+create procedure dataFlowDiagram(in envName text,in filterType text, in filterElement text)
 begin
-  if filterElement != ''
+  if filterType = 'None' and filterElement != ''
   then
     select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName and from_name = filterElement
     union
     select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName and to_name = filterElement
     union
     select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName and dataflow = filterElement;
-  else
+  elseif filterType = 'None' and filterElement = ''
+  then
     select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName;
+  elseif filterType != 'None' and filterElement = ''
+  then
+    select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName and from_type = filterType
+    union
+    select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName and to_type = filterType;
+  else
+    select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName and from_name = filterElement and from_type = filterType
+    union
+    select dataflow, from_name, from_type, to_name, to_type from dataflows where environment = envName and to_name = filterElement and to_type = filterType;
   end if;
 end
 //
@@ -24563,7 +24771,10 @@ begin
   call implicitAssetInclusionCheck(environmentId);
   call implicitAssetVulnerabilityCheck(environmentId);
   call obstructedTasks(environmentId);
+  call obstructedGoalDependencies(environmentId);
+  call deniedUserGoalDependencies(environmentId);
   call inheritanceInconsistency(environmentId);
+  call userGoalLoopCheck();
 
   select distinct label,message from temp_vout;
 
@@ -24732,7 +24943,7 @@ begin
         leave pa_loop;
       end if;
 
-      set msg = concat('Usecase ',ucName,' handles personal data (',assetName,') but no requirements or goals associated with this usecase process this data.');
+      set msg = concat('Usecase ',ucName,' handles personal data (',assetName,') but no requirements or goals associated with this usecase processes this data.');
       select count(ru.requirement_id) into srgCount from requirement_usecase ru, asset_requirement ar where ru.usecase_id = ucId and ru.requirement_id = ar.requirement_id and ar.asset_id = assetId;
       if srgCount = 0
       then
@@ -25283,6 +25494,7 @@ begin
   declare ssCount int default 0;
   declare rcCount int default 0;
   declare ucCount int default 0;
+  declare tcCount int default 0;
   declare charName varchar(2000);
   declare refName varchar(200);
   declare synName varchar(1000);
@@ -25297,13 +25509,15 @@ begin
   declare destName varchar(2000);
   declare meName varchar(100);
   declare contName varchar(100);
-
+  declare taskName varchar(200);
+  declare gSat varchar(100);
+  declare goalName varchar(100);
   declare done int default 0;
 
   declare csCursor cursor for 
-    select pc.description,pcs.synopsis,td.name,'persona',p.name from persona_characteristic_synopsis pcs, persona_characteristic pc, trace_dimension td, persona p where pcs.characteristic_id = pc.id and pc.persona_id = p.id and pcs.dimension_id = td.id;
+    select pc.description,pcs.synopsis,td.name,'persona',p.name,gs.name from persona_characteristic_synopsis pcs, persona_characteristic pc, trace_dimension td, persona p, goal_satisfaction gs where pcs.characteristic_id = pc.id and pc.persona_id = p.id and pcs.dimension_id = td.id and pcs.satisfaction = gs.id;
   declare rsCursor cursor for
-    select dr.name,drs.synopsis,td.name,'persona',p.name from document_reference_synopsis drs,document_reference dr, trace_dimension td, persona p where drs.reference_id = dr.id and drs.dimension_id = td.id and drs.actor_id = p.id;
+    select dr.name,drs.synopsis,td.name,'persona',p.name,gs.name from document_reference_synopsis drs,document_reference dr, trace_dimension td, persona p, goal_satisfaction gs where drs.reference_id = dr.id and drs.dimension_id = td.id and drs.actor_id = p.id and drs.satisfaction = gs.id;
 
   declare envCursor cursor for 
     select id,name from environment;
@@ -25316,11 +25530,23 @@ begin
     select uc.name,ucss.step_no,ucss.synopsis,'role',r.name from usecase uc, usecase_step_synopsis ucss, role r where ucss.usecase_id = uc.id and ucss.environment_id = envId and ucss.actor_id = r.id and ucss.actor_type_id = 10;
 
   declare rcCursor cursor for
-    select drs.synopsis, pcs.synopsis, ce.name, lc.name from document_reference_contribution drc, document_reference_synopsis drs, persona_characteristic_synopsis pcs, contribution_end ce, link_contribution lc where drc.reference_id = drs.id and drc.characteristic_id = pcs.characteristic_id and drc.end_id = lc.id and drc.contribution_id = ce.id
+    select drs.synopsis, pcs.synopsis, ce.name, lc.name from document_reference_contribution drc, document_reference_synopsis drs, persona_characteristic_synopsis pcs, contribution_end ce, link_contribution lc where drc.reference_id = drs.id and drc.characteristic_id = pcs.characteristic_id and drc.end_id = ce.id and drc.contribution_id = lc.id
+    union
+    select pcs.synopsis, drs.synopsis, ce.name, lc.name from document_reference_contribution drc, document_reference_synopsis drs, persona_characteristic_synopsis pcs, contribution_end ce, link_contribution lc where drc.characteristic_id = drs.id and drc.reference_id = pcs.characteristic_id and drc.end_id = ce.id and drc.contribution_id = lc.id
+    union
+    select pcss.synopsis, pcst.synopsis, ce.name, lc.name from document_reference_contribution drc, persona_characteristic_synopsis pcss, persona_characteristic_synopsis pcst, contribution_end ce, link_contribution lc where drc.reference_id = pcss.characteristic_id and drc.characteristic_id = pcst.characteristic_id and drc.end_id = ce.id and drc.contribution_id = lc.id
+    union
+    select drss.synopsis, drst.synopsis, ce.name, lc.name from document_reference_contribution drc, document_reference_synopsis drss, document_reference_synopsis drst, contribution_end ce, link_contribution lc where drc.reference_id = drss.id and drc.characteristic_id = drst.id and drc.end_id = ce.id and drc.contribution_id = lc.id
     union
     select drs.synopsis, uc.name, ce.name, lc.name from usecase_dr_contribution udc, document_reference_synopsis drs, usecase uc, contribution_end ce, link_contribution lc where udc.usecase_id = uc.id and udc.reference_id = drs.id and udc.end_id = lc.id and udc.contribution_id = ce.id;
   declare ucCursor cursor for
     select uc.name, pcs.synopsis, ce.name, lc.name from usecase_pc_contribution upc, usecase uc, persona_characteristic_synopsis pcs, contribution_end ce, link_contribution lc where upc.usecase_id = uc.id and upc.characteristic_id = pcs.characteristic_id and upc.end_id = ce.id and upc.contribution_id = lc.id;
+  declare tcCursor cursor for
+    select t.name, e.name, drs.synopsis, lc.name from task t, environment e, document_reference_synopsis drs, link_contribution lc, task_goal_contribution tgc, environment_task et where tgc.task_id = t.id and tgc.task_id = et.task_id and et.environment_id = e.id and tgc.reference_id = drs.id and tgc.contribution_id = lc.id
+    union
+    select t.name, e.name, pcs.synopsis, lc.name from task t, environment e, persona_characteristic_synopsis pcs, link_contribution lc, task_goal_contribution tgc, environment_task et where tgc.task_id = t.id and tgc.task_id = et.task_id and et.environment_id = e.id and tgc.reference_id = pcs.characteristic_id and tgc.contribution_id = lc.id;
+
+  declare goalCursor cursor for select g.name from user_system_goal_link usgl, goal g, synopsis s where usgl.user_goal_id = s.id and s.synopsis = synName and usgl.system_goal_id = g.id order by 1;
 
 
   declare continue handler for not found set done = 1;
@@ -25332,12 +25558,24 @@ begin
 
   open csCursor;
   cs_loop: loop
-    fetch csCursor into charName,synName,synDim,aType,aName;
+    fetch csCursor into charName,synName,synDim,aType,aName,gSat;
     if done = 1
     then
       leave cs_loop;
     end if;
-    set buf = concat(buf,'  <characteristic_synopsis characteristic="',charName,'" synopsis="',synName,'" dimension="',synDim,'" actor_type="',aType,'" actor="',aName,'" />\n');
+    set buf = concat(buf,'  <characteristic_synopsis characteristic="',charName,'" synopsis="',synName,'" dimension="',synDim,'" actor_type="',aType,'" actor="',aName,'" satisfaction="',gSat,'">\n');
+    open goalCursor;
+    goal_loop: loop
+      fetch goalCursor into goalName;
+      if done = 1
+      then
+        leave goal_loop;
+      end if;
+      set buf = concat(buf,'    <system_goal name="',goalName,'"/>\n');
+    end loop goal_loop;
+    close goalCursor;
+    set done = 0;
+    set buf = concat(buf,'  </characteristic_synopsis>\n');
     set csCount = csCount + 1;
   end loop cs_loop;
   close csCursor;
@@ -25345,12 +25583,24 @@ begin
   set done = 0;
   open rsCursor;
   rs_loop: loop
-    fetch rsCursor into refName,synName,synDim,aType,aName;
+    fetch rsCursor into refName,synName,synDim,aType,aName,gSat;
     if done = 1
     then
       leave rs_loop;
     end if;
-    set buf = concat(buf,'  <reference_synopsis reference="',refName,'" synopsis="',synName,'" dimension="',synDim,'" actor_type="',aType,'" actor="',aName,'" />\n');
+    set buf = concat(buf,'  <reference_synopsis reference="',refName,'" synopsis="',synName,'" dimension="',synDim,'" actor_type="',aType,'" actor="',aName,'" satisfaction="',gSat,'">\n');
+    open goalCursor;
+    goal_loop: loop
+      fetch goalCursor into goalName;
+      if done = 1
+      then
+        leave goal_loop;
+      end if;
+      set buf = concat(buf,'    <system_goal name="',goalName,'"/>\n');
+    end loop goal_loop;
+    close goalCursor;
+    set done = 0;
+    set buf = concat(buf,'  </reference_synopsis>\n');
     set rsCount = rsCount + 1;
   end loop rs_loop;
   close rsCursor;
@@ -25409,9 +25659,23 @@ begin
   end loop uc_loop;
   close ucCursor;
 
+  set done = 0;
+  open tcCursor;
+  tc_loop: loop
+    fetch tcCursor into taskName, envName, synName, contName;
+    if done = 1
+    then
+      leave tc_loop;
+    end if;
+    set buf = concat(buf,'  <task_contribution task="',taskName,'" environment="',envName,'" referent="',synName,'" contribution="',contName,'" />\n');
+    set tcCount = tcCount + 1;
+
+  end loop tc_loop;
+  close tcCursor;
+
 
   set buf = concat(buf,'</synopses>');
-  select buf,csCount,rsCount,ssCount,rcCount,ucCount;
+  select buf,csCount,rsCount,ssCount,rcCount,ucCount,tcCount;
   
 end
 //
@@ -25880,7 +26144,7 @@ begin
       select goal_id into obsId from obstaclevulnerability_goalassociation where subgoal_id = vulId and environment_id = envId;
       if obsId is not null
       then
-        call isObstacleObstructed(obsId,envId,isObstructed);
+        call isObstacleObstructed(obsId,envId,0,isObstructed);
         if isObstructed != true
         then
           set mitigatingRatingId = ratingId;
@@ -25906,7 +26170,7 @@ begin
 end
 //
 
-create procedure obstructedGoals(in taskId int, in envId int)
+create procedure obstructedGoals(in gtId int, in envId int)
 begin
   declare goalId int;
   declare goalCount int default 0;
@@ -25914,7 +26178,10 @@ begin
   declare done int default 0;
   declare rootGoalName varchar(100);
   declare obsGoalName varchar(100);
-  declare opGoalCursor cursor for select goal_id from goaltask_goalassociation where subgoal_id = taskId and environment_id = envId; 
+  declare opGoalCursor cursor for 
+    select goal_id from goaltask_goalassociation where subgoal_id = gtId and environment_id = envId
+    union
+    select goal_id from goalgoal_goalassociation where subgoal_id = gtId and environment_id = envId;
   declare obsGoalCursor cursor for select obstructed from temp_obstructed order by 1; 
   declare continue handler for not found set done = 1;
 
@@ -25931,7 +26198,7 @@ begin
       leave og_loop;
     end if;
 
-    call isGoalObstructed(goalId,envId,isObstructed);
+    call isGoalObstructed(goalId,envId,0,isObstructed);
     if isObstructed = true
     then
       select count(goal_id) into goalCount from goalgoal_goalassociation where subgoal_id = goalId and environment_id = envId;
@@ -26040,76 +26307,131 @@ begin
 end
 //
 
-create procedure isGoalObstructed(in goalId int,in environmentId int, out isObstructed bool) 
+create procedure isGoalObstructed(in goalId int,in environmentId int, in vulVariant int, out isObstructed bool) 
 begin
   declare done int default 0;
   declare obsCount int;
   declare obsId int;
   declare tgId int;
+  declare isDenied bool;
   declare roCount int default 0;
   declare goalCursor cursor for select subgoal_id from goalgoal_goalassociation where environment_id = environmentId and goal_id = goalId;
   declare obsCursor cursor for select subgoal_id from goalobstacle_goalassociation where environment_id = environmentId and goal_id = goalId;
   declare continue handler for not found set done = 1;
 
-
-
-  select count(subgoal_id) into obsCount from goalobstacle_goalassociation where goal_id = goalId and environment_id = environmentId;
-  if (obsCount > 0)
+  call isGoalDenied(goalId,environmentId,isDenied);
+  if isDenied = true
   then
-    select count(og.subgoal_id) into roCount from goalobstacle_goalassociation go, obstaclegoal_goalassociation og where go.goal_id = goalId and go.subgoal_id = og.goal_id and og.environment_id = environmentId and og.environment_id = go.environment_id;
-    if (roCount > 0)
+    set isObstructed = true;
+    insert into temp_obstructed
+    select name from goal where id = goalId;
+  else
+    select count(subgoal_id) into obsCount from goalobstacle_goalassociation where goal_id = goalId and environment_id = environmentId;
+    if (obsCount > 0)
     then
-      set isObstructed = false;
+      select count(og.subgoal_id) into roCount from goalobstacle_goalassociation go, obstaclegoal_goalassociation og where go.goal_id = goalId and go.subgoal_id = og.goal_id and og.environment_id = environmentId and og.environment_id = go.environment_id;
+      if (roCount > 0)
+      then
+        set isObstructed = false;
+      else
+        set isObstructed = true;
+        open obsCursor;
+        obs_loop: loop
+          fetch obsCursor into obsId;
+          if done = 1
+          then
+            leave obs_loop;
+          end if;
+          call isObstacleObstructed(obsId,environmentId,vulVariant,isObstructed);
+        end loop obs_loop;
+        close obsCursor;
+        set done = 0;
+      end if;
     else
-      set isObstructed = true;
-      open obsCursor;
-      obs_loop: loop
-        fetch obsCursor into obsId;
+      open goalCursor;
+      goal_loop: loop
+        fetch goalCursor into tgId;
         if done = 1
         then
-          leave obs_loop;
+          leave goal_loop;
         end if;
-        call isObstacleObstructed(obsId,environmentId,isObstructed);
-      end loop obs_loop;
-      close obsCursor;
-      set done = 0;
+        call isGoalObstructed(tgId,environmentId,vulVariant,isObstructed);
+        if (isObstructed = true)
+        then
+          insert into temp_obstructed
+          select name from goal where id = tgId;
+          leave goal_loop;
+        end if;
+      end loop goal_loop;
+      close goalCursor;
     end if;
-  else
-    open goalCursor;
-    goal_loop: loop
-      fetch goalCursor into tgId;
-      if done = 1
-      then
-        leave goal_loop;
-      end if;
-      call isGoalObstructed(tgId,environmentId,isObstructed);
-      if (isObstructed = true)
-      then
-        insert into temp_obstructed
-        select name from goal where id = tgId;
-        leave goal_loop;
-      end if;
-    end loop goal_loop;
-    close goalCursor;
   end if;
 end
 //
 
-create procedure isObstacleObstructed(in obstacleId int,in environmentId int, out isObstructed bool) 
+create procedure isObstacleObstructed(in obstacleId int,in environmentId int, in vulVariant int, out isObstructed bool) 
 begin
   declare done int default 0;
   declare loId int;
+  declare rgId int;
+  declare ugId int;
   declare roCount int default 0;
   declare dpCount int default 0;
+  declare vulCount int default 0;
+  declare score int default 0;
+  declare isDenied bool default false;
   declare andObsCursor cursor for select subgoal_id from obstacleobstacle_goalassociation where environment_id = environmentId and goal_id = obstacleId and ref_type_id = 0;
   declare orObsCursor cursor for select subgoal_id from obstacleobstacle_goalassociation where environment_id = environmentId and goal_id = obstacleId and ref_type_id = 1;
+  declare rgCursor cursor for select subgoal_id from obstaclegoal_goalassociation where environment_id = environmentId and goal_id = obstacleId;
+  declare ugCursor cursor for select user_goal_id from user_system_goal_link where system_goal_id = rgId;
   declare continue handler for not found set done = 1;
 
   select count(subgoal_id) into roCount from obstaclegoal_goalassociation og where goal_id = obstacleId and environment_id = environmentId;
   select count(subgoal_id) into dpCount from obstacledomainproperty_goalassociation og where goal_id = obstacleId and environment_id = environmentId;
-  if (roCount > 0 or dpCount > 0)
+
+  if vulVariant = 1
+  then
+    select count(subgoal_id) into vulCount from obstaclevulnerability_goalassociation og where goal_id = obstacleId and environment_id = environmentId;
+  end if;
+
+  if (roCount > 0)
+  then
+    open rgCursor;
+    rg_loop: loop
+      fetch rgCursor into rgId;
+      if done = 1
+      then
+        leave rg_loop;
+      end if;
+
+      open ugCursor;
+      ug_loop: loop
+        fetch ugCursor into ugId;
+        if done = 1
+        then
+          leave ug_loop;
+        end if;
+        call userGoalContribution(ugId,environmentId,score);
+        if score < 0
+        then
+          set roCount = 0;
+          set isDenied = true;
+          leave ug_loop;
+        end if;
+      end loop ug_loop;
+      close ugCursor;
+      set done = 0;
+    end loop rg_loop;
+    close rgCursor;
+    set done = 0;
+  end if;
+
+  if (roCount > 0 or dpCount > 0 or vulCount > 0)
   then
     set isObstructed = false;
+  elseif (isDenied = true)
+  then
+    set isObstructed = true;
   else
     set isObstructed = true;
     open orObsCursor;
@@ -26119,7 +26441,7 @@ begin
       then
         leave orobs_loop;
       end if;
-      call isObstacleObstructed(loId,environmentId,isObstructed);
+      call isObstacleObstructed(loId,environmentId,vulVariant,isObstructed);
       if (isObstructed = true)
       then
         leave orobs_loop;
@@ -26136,7 +26458,7 @@ begin
       then
         leave andobs_loop;
       end if;
-      call isObstacleObstructed(loId,environmentId,isObstructed);
+      call isObstacleObstructed(loId,environmentId,vulVariant,isObstructed);
       if (isObstructed = false)
       then
         leave andobs_loop;
@@ -26622,6 +26944,8 @@ begin
   declare isCritical int;
   declare ifName varchar(255);
   declare reqId int;
+  declare arName varchar(50);
+  declare privName varchar(50);
   declare ifType varchar(50);
   declare assetCr varchar(1000);
   declare cProperty varchar(50);
@@ -26681,7 +27005,7 @@ begin
   declare assocRationale longtext default '';
   declare buf LONGTEXT default '';
   declare done int default 0;
-  declare assetIFCursor cursor for select i.name,ai.required_id from asset_interface ai, interface i where ai.asset_id = assetId and ai.interface_id = i.id;
+  declare assetIFCursor cursor for select i.name,ai.required_id,ar.name,p.name from asset_interface ai, interface i,access_right ar, privilege p where ai.asset_id = assetId and ai.interface_id = i.id and ai.access_right_id = ar.id and ai.privilege_id = p.id order by 1;
   declare assetTagCursor cursor for select t.name from asset_tag at, tag t where at.asset_id = assetId and at.tag_id = t.id;
   declare attackerTagCursor cursor for select t.name from attacker_tag at, tag t where at.attacker_id = attackerId and at.tag_id = t.id;
   declare vulTagCursor cursor for select t.name from vulnerability_tag vt, tag t where vt.vulnerability_id = vulId and vt.tag_id = t.id;
@@ -26780,7 +27104,7 @@ begin
     set headElement = 1;
     open assetIFCursor;
     assetIF_loop: loop
-      fetch assetIFCursor into ifName,reqId;
+      fetch assetIFCursor into ifName,reqId,arName,privName;
       if done = 1
       then
         set buf = concat(buf,'],\n    "environments" : [\n');
@@ -26800,7 +27124,7 @@ begin
       else
         set ifType = 'provided';
       end if;
-      set buf = concat(buf,'      {"name" : "',ifName,'", "type" : "',ifType,'"}');
+      set buf = concat(buf,'      {"name" : "',ifName,'", "type" : "',ifType,'", "access_right" : "',arName,'", "privilege" : "',privName,'"}');
     end loop assetIF_loop;
     close assetIFCursor;
     set done = 0;
@@ -26841,6 +27165,7 @@ begin
           set buf = concat(buf,"\n");
         end if;
       end if;
+
       if iProperty != 'None'
       then
         set buf = concat(buf,'      {"name" : "',envName,'", "property" : "integrity", "value" : "',iProperty,'", "rationale" : "',iRationale,'"}');
@@ -28306,14 +28631,14 @@ begin
 
   set done = 0;
   set headElement = 1;
-  set buf = concat(buf,'"obstacles" : [\n');
+  set buf = concat(buf,',"obstacles" : [\n');
 
   open obsCursor;
   obs_loop: loop
     fetch obsCursor into obsId, obsName,obsOrig;
     if done = 1
     then
-      set buf = concat(buf,"}\n]\n");
+      set buf = concat(buf,"\n],\n");
       leave obs_loop;
       set headElement = 1;
     else
@@ -28321,7 +28646,7 @@ begin
       then
         set headElement = 0;
       else
-        set buf = concat(buf,"},\n");
+        set buf = concat(buf,",\n");
       end if;
     end if;
     set buf = concat(buf,'  {"name" : "',obsName,'", "originator" : "',obsOrig,'", "environments" : [\n');
@@ -28334,9 +28659,8 @@ begin
       fetch obsEnvCursor into envId, envName;
       if done = 1
       then
-        set buf = concat(buf,'\n  ]');
+        set buf = concat(buf,'\n  ]}');
         leave obsEnv_loop;
-        set headElement = 1;
       else
         if headElement = 1
         then
@@ -28355,8 +28679,8 @@ begin
         if done = 1
         then
           set buf = concat(buf,'],');
+          set headElement = 0;
           leave obsConcern_loop;
-          set headElement = 1;
         else
           if headElement = 1
           then
@@ -28378,161 +28702,281 @@ begin
     set done = 0;
   end loop obs_loop;
   close obsCursor;
-  set done = 0;
 
+  set done = 0;
+  set headElement = 1;
+  set buf = concat(buf,'"requirements" : [\n');
   open reqCursor;
   req_loop: loop
     fetch reqCursor into refName,refType,reqLabel,reqType,reqPriority,reqName,reqDesc,reqRat,reqFc,reqOrig;
     if done = 1
     then
+      set buf = concat(buf,"\n],\n");
+      set headElement = 1;
       leave req_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
     end if;
-    set buf = concat(buf,'<requirement name=\"',reqName,'\" reference=\"',refName,'\" reference_type=\"',refType,'\" label=\"',reqLabel,'\" type=\"',replace(reqType,' ','_'),'\" priority=\"',reqPriority,'\" >\n  <description>',reqDesc,'</description>\n  <rationale>',reqRat,'</rationale>\n  <fit_criterion>',reqFc,'</fit_criterion>\n  <originator>',reqOrig,'</originator>\n</requirement>\n');
+    set buf = concat(buf,'  {"name" : "',reqName,'", "reference" : "',refName,'", "reference_type" : "',refType,'", "label" : "',reqLabel,'", "type" : "',replace(reqType,' ','_'),'", "priority" : "',reqPriority,'", "description" : "',reqDesc,'", "rationale" : "',reqRat,'", "fit_criterion" : "',reqFc,'", "originator" : "',reqOrig,'"}');
     set reqCount = reqCount + 1;
   end loop req_loop;
   close reqCursor;
-  set done = 0;
 
+  set headElement = 1;
+  set buf = concat(buf,'"usecases" : [\n');
   set done = 0;
   open ucCursor;
   uc_loop: loop
     fetch ucCursor into ucId,ucName,ucAuthor,ucShortCode,ucDesc;
     if done = 1
     then
+      set buf = concat(buf,"\n],\n");
       leave uc_loop;
+      set headElement = 1;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
     end if;
-    set buf = concat(buf,'<usecase name=\"',ucName,'\" author=\"',ucAuthor,'\" code=\"',ucShortCode,'\" >\n  <description>',ucDesc,'</description>\n');
+    set buf = concat(buf,'  {"name" : "',ucName,'", "author" : "',ucAuthor,'", "code" : "',ucShortCode,'", "description" : "',ucDesc,'", "actors" : [');
     set ucCount = ucCount + 1;
 
+    set done = 0;
+    set headElement = 1;
     open ucActorCursor;
     ucActor_loop: loop
       fetch ucActorCursor into roleName;
       if done = 1
       then
+        set buf = concat(buf,'], "environments" : [\n');
         leave ucActor_loop;
+        set headElement = 1;
+      else
+        if headElement = 1
+        then
+          set headElement = 0;
+        else
+          set buf = concat(buf,",");
+        end if;
       end if;
-      set buf = concat(buf,'  <actor name=\"',roleName,'\" />\n');
+      set buf = concat(buf,'"',roleName,'"');
     end loop ucActor_loop;
     close ucActorCursor;
     set done = 0;
 
+    set done = 0;
+    set headElement = 1;
     open ucEnvCursor;
     ucEnv_loop: loop
       fetch ucEnvCursor into envId,envName;
       if done = 1
       then
+        set headElement = 0;
+        set buf = concat(buf,'\n  ]');
         leave ucEnv_loop;
+      else
+        if headElement = 1
+        then
+          set headElement = 0;
+        else
+          set buf = concat(buf,",\n");
+        end if;
       end if;
       select preconditions into ucPreCond from usecase_conditions where usecase_id = ucId and environment_id = envId;
-      set buf = concat(buf,'  <usecase_environment name=\"',envName,'\" >\n    <preconditions>',ucPreCond,'</preconditions>\n    <flow>\n');
+      set buf = concat(buf,'    {"name" : "',envName,'", "preconditions" : "',ucPreCond,'", "flow" : [\n');
 
+      set done = 0;
+      set headElement = 1;
       open ucStepCursor;
       ucStep_loop: loop
         fetch ucStepCursor into stepNo, stepDesc;
         if done = 1
         then
+          set buf = concat(buf,'],');
           leave ucStep_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",\n");
+          end if;
         end if; 
-        set buf = concat(buf,'      <step number=\"',stepNo,'\" description=\"',stepDesc,'\" >\n');
 
+        set buf = concat(buf,'      {"number" : "',stepNo,'", "description" : "',stepDesc,'", "tags" : [');
 
+        set done = 0;
+        set headElement = 1;
         open ucStepTagCursor;
         ucStepTag_loop: loop
           fetch ucStepTagCursor into tagName;
           if done = 1
           then
+            set buf = concat(buf,'], "exceptions" : [');
             leave ucStepTag_loop;
+            set headElement = 1;
+          else
+            if headElement = 1
+            then
+              set headElement = 0;
+            else
+              set buf = concat(buf,",");
+            end if;
           end if;
-          set buf = concat(buf,'        <tag name=\"',tagName,'\" />\n'); 
+          set buf = concat(buf,'"',tagName,'"'); 
         end loop ucStepTag_loop;
         close ucStepTagCursor;
-        set done = 0;
 
+        set done = 0;
+        set headElement = 1;
         open ucStepExceptionCursor;
         ucStepException_loop: loop
           fetch ucStepExceptionCursor into ucExcName,excDim,ucExcRelValue,ucExcCategory,ucExcDesc;
           if done = 1
           then
+            set buf = concat(buf,']}\n');
+            set headElement = 0;
             leave ucStepException_loop;
+          else
+            if headElement = 1
+            then
+              set headElement = 0;
+            else
+              set buf = concat(buf,",");
+            end if;
           end if;
-          set buf = concat(buf,'        <exception name=\"',ucExcName,'\" type=\"',excDim,'\" value=\"',ucExcRelValue,'\" category=\"',replace(ucExcCategory,' ','_'),'\" >\n          <definition>',ucExcDesc,'</definition>\n        </exception>\n');
+          set buf = concat(buf,'{"name" : "',ucExcName,'", "type" : "',excDim,'", "value" : "',ucExcRelValue,'", "category" : "',replace(ucExcCategory,' ','_'),'", "definition" : "',ucExcDesc,'"}');
         end loop ucStepException_loop;
         close ucStepExceptionCursor;
         set done = 0;
-
-        set buf = concat(buf,'      </step>\n');
       end loop ucStep_loop;
       close ucStepCursor;
       set done = 0;
-   
-      set buf = concat(buf,'    </flow>\n');
       select postconditions into ucPostCond from usecase_conditions where usecase_id = ucId and environment_id = envId;
-      set buf = concat(buf,'    <postconditions>',ucPostCond,'</postconditions>\n');
-      set buf = concat(buf,'  </usecase_environment>\n');
+      set buf = concat(buf,'     "postconditions" : "',ucPostCond,'"}\n');
     end loop ucEnv_loop;
     close ucEnvCursor;
     set done = 0;
-
-    set buf = concat(buf,'</usecase>\n');
   end loop uc_loop;
   close ucCursor;
 
+  set done = 0;
+  set buf = concat(buf,'"countermeasures" : [\n');
+  set headElement = 1;
   open cmCursor;
   cm_loop: loop
     fetch cmCursor into cmId, cmName, cmDesc, cmType;
     if done = 1
     then
+      set buf = concat(buf,"}\n]\n");
       leave cm_loop;
+      set headElement = 1;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,"},\n");
+      end if;
     end if;
-    set buf = concat(buf,'<countermeasure name=\"',cmName,'\" type=\"',cmType,'\" >\n  <description>',cmDesc,'</description>\n');
-    set cmCount = cmCount + 1;
 
+    set buf = concat(buf,'  {"name" : "',cmName,'", "type" : "',cmType,'", "description" : "',cmDesc,'", "environments" : [\n');
+    set cmCount = cmCount + 1;
+    set done = 0;
+    set headElement = 1;
     open cmEnvCursor;
     cmEnv_loop: loop
       fetch cmEnvCursor into envId, envName;
       if done = 1
       then
+        set headElement = 0;
+        set buf = concat(buf,'\n  ]');
         leave cmEnv_loop;
+      else
+        if headElement = 1
+        then
+          set headElement = 0;
+        else
+          set buf = concat(buf,",\n");
+        end if;
       end if;
-      set buf = concat(buf,'  <countermeasure_environment name=\"',envName,'\" cost=\"',countermeasureCost(cmId,envId),'\" >\n');
+      set buf = concat(buf,'    {"name" : "',envName,'", "cost" : "',countermeasureCost(cmId,envId),'", "requirements" : [');
 
+      set done = 0;
+      set headElement = 1;
       open cmReqsCursor;
       cmReqs_loop: loop
         fetch cmReqsCursor into reqName;
         if done = 1
         then
+          set buf = concat(buf,'], "targets" : [');
           leave cmReqs_loop;
+          set headElement = 1;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
         end if;
-        set buf = concat(buf,'    <countermeasure_requirement name=\"',reqName,'\" />\n');
+        set buf = concat(buf,'"',reqName,'"');
       end loop cmReqs_loop;
       close cmReqsCursor;
-      set done = 0;
 
+      set done = 0;
+      set headElement = 1;
       open cmTargetsCursor;
       cmTargets_loop: loop
         fetch cmTargetsCursor into targetName,effValue,cmRationale;
         if done = 1
         then
+          set buf = concat(buf,'],');
+          leave cmTargets_loop;
+          set headElement = 1;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
           leave cmTargets_loop;
         end if;
-        set buf = concat(buf,'    <target name=\"',targetName,'\" effectiveness=\"',effValue,'\" >\n');
+        set buf = concat(buf,'{"name" : "',targetName,'", "effectiveness" : "',effValue,'", "responses" : [');
 
         open targetResponseCursor;
         tr_loop: loop
           fetch targetResponseCursor into trName;
           if done = 1
           then
+            set buf = concat(buf,'], "rationale" : "',cmRationale,'"},"mitigating_properties" : [');
             leave tr_loop;
+            set headElement = 1;
+          else
+            if headElement = 1
+            then
+              set headElement = 0;
+            else
+              set buf = concat(buf,",");
+            end if;
           end if;
-          set buf = concat(buf,'      <target_response name=\"',trName,'\" />\n');
+          set buf = concat(buf,'"',trName,'"');
         end loop tr_loop;
         close targetResponseCursor;
         set done = 0;        
-
-        set buf = concat(buf,'      <rationale>',cmRationale,'</rationale>\n    </target>\n');
       end loop cmTargets_loop;
       close cmTargetsCursor;
       set done = 0;
+     
 
       select spv.name,cp.property_rationale into cProperty,cRationale from countermeasure_property cp, security_property_value spv where cp.countermeasure_id = cmId and cp.property_id = 0 and cp.environment_id = envId and cp.property_value_id = spv.id;
       select spv.name,cp.property_rationale into iProperty,iRationale from countermeasure_property cp, security_property_value spv where cp.countermeasure_id = cmId and cp.property_id = 1 and cp.environment_id = envId and cp.property_value_id = spv.id;
@@ -28542,73 +28986,119 @@ begin
       select spv.name,cp.property_rationale into panProperty,panRationale from countermeasure_property cp, security_property_value spv where cp.countermeasure_id = cmId and cp.property_id = 5 and cp.environment_id = envId and cp.property_value_id = spv.id;
       select spv.name,cp.property_rationale into unlProperty,unlRationale from countermeasure_property cp, security_property_value spv where cp.countermeasure_id = cmId and cp.property_id = 6 and cp.environment_id = envId and cp.property_value_id = spv.id;
       select spv.name,cp.property_rationale into unoProperty,unoRationale from countermeasure_property cp, security_property_value spv where cp.countermeasure_id = cmId and cp.property_id = 7 and cp.environment_id = envId and cp.property_value_id = spv.id;
+
       if cProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="confidentiality" value=\"',cProperty,'\">\n      <rationale>',cRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "confidentiality", "value" : "',cProperty,'", "rationale" : "',cRationale,'"}');
+        if iProperty != 'None' or avProperty != 'None' or acProperty != 'None' or anProperty != 'None' or panProperty != 'None' or unlProperty != 'None' or unoProperty != 'None'
+        then
+          set buf = concat(buf,",");
+        end if;
       end if;
+
       if iProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="integrity" value=\"',iProperty,'\">\n      <rationale>',iRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "integrity", "value" : "',iProperty,'", "rationale" : "',iRationale,'"}');
+        if avProperty != 'None' or acProperty != 'None' or anProperty != 'None' or panProperty != 'None' or unlProperty != 'None' or unoProperty != 'None'
+        then
+          set buf = concat(buf,",");
+        end if;
       end if;
       if avProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="availability" value=\"',avProperty,'\">\n      <rationale>',avRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "availability", "value" : "',avProperty,'", "rationale" : "',avRationale,'"}');
+        if acProperty != 'None' or anProperty != 'None' or panProperty != 'None' or unlProperty != 'None' or unoProperty != 'None'
+        then
+          set buf = concat(buf,",");
+        end if;
       end if;
       if acProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="accountability" value=\"',acProperty,'\">\n      <rationale>',acRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "accountability", "value" : "',acProperty,'", "rationale" : "',acRationale,'"}');
+        if anProperty != 'None' or panProperty != 'None' or unlProperty != 'None' or unoProperty != 'None'
+        then
+          set buf = concat(buf,",");
+        end if;
       end if;
       if anProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="anonymity" value=\"',anProperty,'\">\n      <rationale>',anRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "anonymity", "value" : "',anProperty,'", "rationale" : "',anRationale,'"}');
+        if panProperty != 'None' or unlProperty != 'None' or unoProperty != 'None'
+        then
+          set buf = concat(buf,",");
+        end if;
       end if;
       if panProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="pseudonymity" value=\"',panProperty,'\">\n      <rationale>',panRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "pseudonymity", "value" : "',panProperty,'", "rationale" : "',panRationale,'"}');
+        if unlProperty != 'None' or unoProperty != 'None'
+        then
+          set buf = concat(buf,",");
+        end if;
       end if;
       if unlProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="unlinkability" value=\"',unlProperty,'\">\n      <rationale>',unlRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "unlinkability", "value" : "',unlProperty,'", "rationale" : "',unlRationale,'"}');
+        if unoProperty != 'None'
+        then
+          set buf = concat(buf,",");
+        end if;
       end if;
       if unoProperty != 'None'
       then
-        set buf = concat(buf,'    <mitigating_property name="unobservability" value=\"',unoProperty,'\">\n      <rationale>',unoRationale,'</rationale>\n    </mitigating_property>\n');
+        set buf = concat(buf,'{"name" : "unobservability", "value" : "',unoProperty,'", "rationale" : "',unoRationale,'"}');
       end if;
+      set buf = concat(buf,'], "responsible_roles" : [');
    
+      set done = 0;
+      set headElement = 1;
       open cmRolesCursor;
       cmRoles_loop: loop
         fetch cmRolesCursor into roleName;
         if done = 1
         then
+          set buf = concat(buf,'], "responsible_personas" : [');
+          set headElement = 1;
           leave cmRoles_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
         end if;
-        set buf = concat(buf,'    <responsible_role name=\"',roleName,'\" />\n');
+        set buf = concat(buf,'"',roleName,'"');
       end loop cmRoles_loop;
       close cmRolesCursor;
-      set done = 0;
 
+      set done = 0;
+      set headElement = 1;
       open cmPersonasCursor;
       cmPersonas_loop: loop
         fetch cmPersonasCursor into taskName,personaName,durValue,freqValue,demValue,gcValue;
         if done = 1
         then
+          set buf = concat(buf,']}');
+          set headElement = 0;
           leave cmPersonas_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
         end if;
-        set buf = concat(buf,'    <responsible_persona task=\"',taskName,'\" persona=\"',personaName,'\" duration=\"',replace(durValue,' ','_'),'\" frequency=\"',replace(freqValue,' ','_'),'\" demands=\"',replace(demValue,' ','_'),'\" goals=\"',replace(gcValue,' ','_'),'\" />\n');
+        set buf = concat(buf,'{"task" : "',taskName,'", "persona" : "',personaName,'", "duration" : "',replace(durValue,' ','_'),'", "frequency" : "',replace(freqValue,' ','_'),'", "demands" : "',replace(demValue,' ','_'),'", "goals" : "',replace(gcValue,' ','_'),'"}');
       end loop cmPersonas_loop;
       close cmPersonasCursor;
       set done = 0;
-
-      set buf = concat(buf,'  </countermeasure_environment>\n');
     end loop cmEnv_loop;
     close cmEnvCursor;
     set done = 0;
-
-    set buf = concat(buf,'</countermeasure>\n');
   end loop cm_loop;
   close cmCursor;
-
-  set buf = concat(buf,'</goals>');
   select buf,dpCount,goalCount,obsCount,reqCount,ucCount,cmCount;
 end
 //
@@ -28719,7 +29209,7 @@ begin
     then
       leave og_loop;
     end if;
-    call isGoalObstructed(goalId,envId,isObstructed);
+    call isGoalObstructed(goalId,envId,0,isObstructed);
     if isObstructed = true
     then
       select count(goal_id) into goalCount from goalgoal_goalassociation where subgoal_id = goalId and environment_id = envId;
@@ -29250,6 +29740,1210 @@ begin
   deallocate prepare stmt;
   set traceCount = @traceCount;
   select traceCount;
+end
+//
+
+create procedure locationsToJSON()
+begin
+  declare locsCount int default 0;
+  declare locsId int;
+  declare locsName varchar(1000);
+  declare locsDia varchar(1000);
+  declare locId int;
+  declare locName varchar(1000);
+  declare aiName varchar(1000);
+  declare assetName varchar(200);
+  declare piName varchar(1000);
+  declare personaName varchar(50);
+  declare linkName varchar(1000);
+  declare headElement int default 1;
+
+  declare done int default 0;
+  declare buf LONGTEXT default '';
+  declare locsCursor cursor for select id,name,diagram from locations order by 2;
+  declare locCursor cursor for select id,name from location where locations_id = locsId order by 2;
+  declare aiCursor cursor for select ai.name,a.name from asset_instance ai, asset a where location_id = locId and ai.asset_id = a.id order by 1;
+  declare piCursor cursor for select pi.name,p.name from persona_instance pi, persona p where location_id = locId and pi.persona_id = p.id order by 1;
+  declare linkCursor cursor for 
+    select l.name from location l, location_link ll where ll.locations_id = locsId and ll.head_location_id != locId and ll.head_location_id = l.id
+    union
+    select l.name from location l, location_link ll where ll.locations_id = locsId and ll.tail_location_id != locId and ll.tail_location_id = l.id;
+
+  declare continue handler for not found set done = 1;
+
+  set buf = concat(buf,'"locations" : [\n');
+  open locsCursor;
+  locs_loop: loop
+    fetch locsCursor into locsId, locsName, locsDia;
+    if done = 1
+    then
+      set buf = concat(buf,"]\n\n");
+      leave locs_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+    set buf = concat(buf,'  {"name" : "',locsName,'", "diagram" : "',locsDia,'", "locations" : [\n');
+    set locsCount = locsCount + 1;
+
+    set headElement = 1;
+    open locCursor;
+    loc_loop: loop
+      fetch locCursor into locId,locName;
+      if done = 1
+      then
+        set buf = concat(buf,"  ]}\n");
+        leave loc_loop;
+      else
+        if headElement = 1
+        then
+          set headElement = 0;
+        else
+          set buf = concat(buf,",");
+        end if;
+      end if;
+      set buf = concat(buf,'    {"name" : "',locName,'", "asset_instances" : [');
+
+      set headElement = 1;
+      open aiCursor;
+      ai_loop: loop
+        fetch aiCursor into aiName, assetName;
+        if done = 1
+        then
+          set buf = concat(buf,'],"persona_instances" : [');
+          leave ai_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
+        end if;
+        set buf = concat(buf,'{"name" : "',aiName,'", "asset" : "',assetName,'"}');
+      end loop ai_loop;
+      close aiCursor;
+      set done = 0;
+
+      set headElement = 1;
+      open piCursor;
+      pi_loop: loop
+        fetch piCursor into piName, personaName;
+        if done = 1
+        then
+          set buf = concat(buf,'],"links" : [');
+          leave pi_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
+        end if;
+        set buf = concat(buf,'{"name" : "',piName,'", "persona" : "',personaName,'"}');
+      end loop pi_loop;
+      close piCursor;
+      set done = 0;
+
+      set headElement = 1;
+      open linkCursor;
+      link_loop: loop
+        fetch linkCursor into linkName;
+        if done = 1
+        then
+          set buf = concat(buf,']}\n');
+          leave link_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
+        end if;
+        set buf = concat(buf,'{"name" : "',linkName,'"}');
+      end loop link_loop;
+      close linkCursor;
+      set done = 0;
+    
+    end loop loc_loop;
+    close locCursor;  
+    set done = 0; 
+
+  end loop locs_loop;
+  close locsCursor;
+  select buf,locsCount;
+end
+//
+
+create procedure associationsToJSON()
+begin
+  declare buf LONGTEXT default '';
+  declare headElement int default 1;
+  declare fromDim varchar(50);
+  declare fromName varchar(200);
+  declare toDim varchar(50);
+  declare toName varchar(200);
+  declare refType varchar(50);
+  declare envName varchar(50);
+  declare goalName varchar(100);
+  declare goalDim varchar(50);
+  declare subGoalName varchar(100);
+  declare subGoalDim varchar(50);
+  declare alternativeId int;
+  declare altRationale varchar(1000);
+  declare cmName varchar(100);
+  declare reqName varchar(50);
+  declare responseName varchar(100);
+  declare roleName varchar(50);
+  declare costName varchar(50);
+  declare dependerName varchar(50);
+  declare dependeeName varchar(50);
+  declare depType varchar(50);
+  declare dependencyName varchar(200);
+  declare maCount int default 0;
+  declare gaCount int default 0;
+  declare rrCount int default 0;
+  declare depCount int default 0;
+  declare done int default 0;
+  declare maCursor cursor for
+    select 'requirement',r.name,'task', t.name,rty.name from task t, requirement r, requirement_task rt, reference_type rty where rt.task_id = t.id and rt.requirement_id = r.id and r.version = (select max(i.version) from requirement i where i.id = r.id) and rt.ref_type_id = rty.id
+    union
+    select 'requirement',r.name,'usecase', u.name,rty.name from usecase u, requirement r, requirement_usecase ru, reference_type rty where ru.usecase_id = u.id and ru.requirement_id = r.id and r.version = (select max(i.version) from requirement i where i.id = r.id) and ru.ref_type_id = rty.id
+    union
+    select 'usecase', u.name, 'task', t.name, '' from usecase_task ut, usecase u, task t where ut.usecase_id = u.id and ut.task_id = t.id
+    union
+    select 'task', t.name, 'vulnerability', v.name, '' from task_vulnerability tv, vulnerability v, task t where tv.task_id = t.id and tv.vulnerability_id = v.id
+    union
+    select 'requirement', r.name, 'vulnerability', v.name, '' from requirement r, vulnerability v, requirement_vulnerability rv where rv.requirement_id = r.id and r.version = (select max(i.version) from requirement i where i.id = r.id) and rv.vulnerability_id = v.id
+    union
+    select 'domainproperty', dp.name, 'asset', a.name, '' from domainproperty dp, domainproperty_asset da, asset a where da.asset_id = a.id and da.domainproperty_id = dp.id
+    union
+    select 'requirement', r.name, 'role', ro.name, '' from requirement r, role ro, requirement_role rr where rr.requirement_id = r.id and r.version = (select max(i.version) from requirement i where i.id = r.id) and rr.role_id = ro.id
+    union
+    select 'countermeasure', c.name, 'asset', a.name, '' from countermeasure_asset ca, countermeasure c, asset a where ca.countermeasure_id = c.id and ca.asset_id = a.id
+    union
+    select 'risk', r.name, 'vulnerability', v.name, '' from risk_vulnerability rv, vulnerability v, risk r where rv.risk_id = r.id and rv.vulnerability_id = v.id
+    union
+    select 'risk', r.name, 'threat', t.name, '' from risk_threat rt, threat t, risk r where rt.risk_id = r.id and rt.threat_id = t.id
+    union
+    select 'response', r.name, 'goal', g.name, '' from response_goal rg, response r, goal g where rg.response_id = r.id and rg.goal_id = g.id
+    union
+    select 'requirement', fr.name, 'requirement', tr.name, rr.label from requirement_requirement rr, requirement fr, requirement tr where rr.from_id = fr.id and rr.to_id = tr.id;
+
+  declare goalAssocCursor cursor for
+    select e.name,hg.name,'goal',rt.name,tg.name,'goal',ga.alternative_id,ga.rationale from goalgoal_goalassociation ga, environment e, goal hg, reference_type rt, goal tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'goal',rt.name,tg.name,'requirement',ga.alternative_id,ga.rationale from goalrequirement_goalassociation ga, environment e, goal hg, reference_type rt, requirement tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and tg.version = (select max(i.version) from requirement i where i.id = tg.id) and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'requirement',ga.alternative_id,ga.rationale from obstaclerequirement_goalassociation ga, environment e, obstacle hg, reference_type rt, requirement tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and tg.version = (select max(i.version) from requirement i where i.id = tg.id) and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'goal',rt.name,tg.name,'task',ga.alternative_id,ga.rationale from goaltask_goalassociation ga, environment e, goal hg, reference_type rt, task tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'task',ga.alternative_id,ga.rationale from obstacletask_goalassociation ga, environment e, obstacle hg, reference_type rt, task tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'usecase',ga.alternative_id,ga.rationale from obstacleusecase_goalassociation ga, environment e, obstacle hg, reference_type rt, usecase tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'goal',rt.name,tg.name,'usecase',ga.alternative_id,ga.rationale from goalusecase_goalassociation ga, environment e, goal hg, reference_type rt, usecase tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'goal',rt.name,tg.name,'role',ga.alternative_id,ga.rationale from goalrole_goalassociation ga, environment e, goal hg, reference_type rt, role tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'goal',rt.name,tg.name,'domainproperty',ga.alternative_id alternative_id,ga.rationale from goaldomainproperty_goalassociation ga, environment e, goal hg, reference_type rt, domainproperty tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'goal',rt.name,tg.name,'obstacle',ga.alternative_id,ga.rationale from goalobstacle_goalassociation ga, environment e, goal hg, reference_type rt, obstacle tg, environment_goal eg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id and ga.environment_id = eg.environment_id and ga.goal_id = eg.goal_id
+    union
+    select e.name,hg.name,'domainproperty',rt.name,tg.name,'obstacle',ga.alternative_id,ga.rationale from domainpropertyobstacle_goalassociation ga, environment e, domainproperty hg, reference_type rt, obstacle tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'goal',ga.alternative_id,ga.rationale from obstaclegoal_goalassociation ga, environment e, obstacle hg, reference_type rt, goal tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'obstacle',ga.alternative_id,ga.rationale from obstacleobstacle_goalassociation ga, environment e, obstacle hg, reference_type rt, obstacle tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'requirement',rt.name,tg.name,'obstacle',ga.alternative_id,ga.rationale from requirementobstacle_goalassociation ga, environment e, requirement hg, reference_type rt, obstacle tg where ga.goal_id = hg.id and hg.version = (select max(i.version) from requirement i where i.id = hg.id) and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'goal',ga.alternative_id,ga.rationale from obstaclegoal_goalassociation ga, environment e, obstacle hg, reference_type rt, goal tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'threat',ga.alternative_id,ga.rationale from obstaclethreat_goalassociation ga, environment_obstacle eo, environment e, obstacle hg, threat tg, reference_type rt where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id 
+    union
+    select e.name,hg.name,'obstacle',rt.name,tg.name,'vulnerability',ga.alternative_id,ga.rationale from obstaclevulnerability_goalassociation ga, environment_obstacle eo, environment e, obstacle hg, vulnerability tg, reference_type rt where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
+    union
+    select e.name,hg.name,'countermeasure', rt.name,tg.name,'task',ga.alternative_id,ga.rationale from countermeasure hg, task tg, countermeasuretask_goalassociation ga, environment_countermeasure ec, environment_obstacle eo, reference_type rt, environment e where ga.goal_id = hg.id and ga.subgoal_id = tg.id and ga.ref_type_id = rt.id and ga.environment_id = ec.environment_id and ec.environment_id = eo.environment_id and eo.environment_id = e.id;
+
+  declare depCursor cursor for
+    select e.name,dr.name,de.name,'goal',g.name,rgr.rationale from rolegoalrole_dependency rgr, role dr, role de, environment e, goal g where rgr.environment_id = e.id and rgr.depender_id = dr.id and rgr.dependee_id = de.id and rgr.dependency_id = g.id
+    union
+    select e.name,dr.name,de.name,'task',t.name,rtr.rationale from roletaskrole_dependency rtr, role dr, role de, environment e, task t where rtr.environment_id = e.id and rtr.depender_id = dr.id and rtr.dependee_id = de.id and rtr.dependency_id = t.id
+    union
+    select e.name,dr.name,de.name,'asset',a.name,rar.rationale from roleassetrole_dependency rar, role dr, role de, environment e, asset a where rar.environment_id = e.id and rar.depender_id = dr.id and rar.dependee_id = de.id and rar.dependency_id = a.id;
+
+  declare continue handler for not found set done = 1;
+    
+
+  set buf = concat(buf,'"manual_associations" : [\n');  
+  set headElement = 1;
+  open maCursor;
+  ma_loop: loop
+    fetch maCursor into fromDim,fromName,toDim,toName,refType;
+    if done = 1
+    then
+      set buf = concat(buf,"]\n\n");
+      leave ma_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+
+    set buf = concat(buf,'  {"from_name" : "',fromName,'", "from_dim" : "',fromDim,'", "to_name" : "',toName,'", "to_dim" : "',toDim,'"');
+    if (fromDim = 'requirement' and toDim = 'usecase') or (fromDim = 'requirement' and toDim = 'task')
+    then
+      set buf = concat(buf,' ",ref_type" : "',refType,'"');
+    elseif (fromDim = 'requirement' and toDim = 'requirement')
+    then
+      set buf = concat(buf,', "label" : "',refType,'"');
+    end if;
+    set buf = concat(buf,'}');
+    set maCount = maCount + 1;
+  end loop ma_loop;
+  close maCursor;
+
+  set buf = concat(buf,',"goal_associations" : [\n');  
+  set done = 0;
+  set headElement = 1;
+
+  open goalAssocCursor;
+  goalAssoc_loop: loop
+    fetch goalAssocCursor into envName, goalName, goalDim, refType, subGoalName, subGoalDim, alternativeId, altRationale;
+    if done = 1
+    then
+      set buf = concat(buf,"]\n\n");
+      leave goalAssoc_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+    set buf = concat(buf,'  {"environment" : "',envName,'", "goal_name" : "',goalName,'", "goal_dim" : "',goalDim,'", "ref_type" : "',refType,'", "subgoal_name" : "',subGoalName,'", "subgoal_dim" : "',subGoalDim,'", "alternative_id" : "',alternativeId,'", "rationale" : "',altRationale,'"}');
+    set gaCount = gaCount + 1;
+  end loop goalAssoc_loop;
+  close goalAssocCursor;
+
+  set buf = concat(buf,',"dependencies" : [\n');  
+  set done = 0;
+  set headElement = 1;
+  open depCursor;
+  dep_loop: loop
+    fetch depCursor into envName,dependerName,dependeeName,depType,dependencyName,altRationale;
+    if done = 1
+    then
+      set buf = concat(buf,"]\n\n");
+      leave dep_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+    set buf = concat(buf,'  {"depender" : "',dependerName,'", "dependee" : "',dependeeName,'", "dependency_type" : "',depType,'", "dependency" : "',dependencyName,'", "environment" : "',envName,'", "rationale" : "',altRationale,'"}');
+
+    set depCount = depCount + 1;
+  end loop dep_loop;
+  close depCursor;
+  set done = 0;
+  select buf,maCount,gaCount,rrCount,depCount;
+end
+//
+
+create procedure misusabilityToJSON()
+begin
+  declare buf LONGTEXT default '';
+  declare headElement int default 1;
+  declare crName varchar(200);
+  declare crCount int default 0;
+  declare crExcerpt varchar(2000);
+  declare tcId int;
+  declare taskName varchar(200);
+  declare bvName varchar(50);
+  declare modQual varchar(50);
+  declare tcDesc varchar(2000);
+  declare tcCount int default 0;
+  declare gwrType varchar(20);
+  declare gwrRef varchar(200);
+  declare gwrConcept varchar(50);
+  declare done int default 0;
+  declare crCursor cursor for select name,dimension_name,object_name,xmlEscaped(description) from concept_reference; 
+  declare tcCursor cursor for select tc.id,t.name,tc.qualifier,xmlEscaped(tc.description) from task_characteristic tc, task t where tc.task_id = t.id order by 2;
+  declare taskGroundsCursor cursor for
+    select 'document',xmlEscaped(dr.name),'' from task_characteristic_document pc, document_reference dr where pc.characteristic_id = tcId and pc.reference_id = dr.id and pc.characteristic_reference_type_id = 0
+    union
+    select 'persona',xmlEscaped(cr.name),c.name from task_characteristic_persona pc, persona_reference cr, persona c where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.persona_id = c.id and pc.characteristic_reference_type_id = 0
+    union
+    select 'usecase',xmlEscaped(cr.name),c.name from task_characteristic_usecase pc, usecase_reference cr, usecase c where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.usecase_id = c.id and pc.characteristic_reference_type_id = 0
+    union
+    select 'requirement',xmlEscaped(cr.name),c.name from task_characteristic_requirement pc, requirement_reference cr, requirement c, asset_requirement ar, asset a where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.requirement_id = c.id and pc.characteristic_reference_type_id = 0 and c.id = ar.requirement_id and ar.asset_id = a.id and c.version = (select max(i.version) from requirement i where i.id = c.id) 
+    union
+    select 'requirement',xmlEscaped(cr.name),c.name from task_characteristic_requirement pc, requirement_reference cr, requirement c, environment_requirement er, environment e where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.requirement_id = c.id and pc.characteristic_reference_type_id = 0 and c.id = er.requirement_id and er.environment_id = e.id and c.version = (select max(i.version) from requirement i where i.id = c.id); 
+  declare taskWarrantCursor cursor for
+    select 'document',xmlEscaped(dr.name),'' from task_characteristic_document pc, document_reference dr where pc.characteristic_id = tcId and pc.reference_id = dr.id and pc.characteristic_reference_type_id = 1
+    union
+    select 'persona',xmlEscaped(cr.name),c.name from task_characteristic_persona pc, persona_reference cr, persona c where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.persona_id = c.id and pc.characteristic_reference_type_id = 1
+    union
+    select 'usecase',xmlEscaped(cr.name),c.name from task_characteristic_usecase pc, usecase_reference cr, usecase c where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.usecase_id = c.id and pc.characteristic_reference_type_id = 1
+    union
+    select 'requirement',xmlEscaped(cr.name),c.name from task_characteristic_requirement pc, requirement_reference cr, requirement c, asset_requirement ar, asset a where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.requirement_id = c.id and pc.characteristic_reference_type_id = 1 and c.id = ar.requirement_id and ar.asset_id = a.id and c.version = (select max(i.version) from requirement i where i.id = c.id) 
+    union
+    select 'requirement',xmlEscaped(cr.name),c.name from task_characteristic_requirement pc, requirement_reference cr, requirement c, environment_requirement er, environment e where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.requirement_id = c.id and pc.characteristic_reference_type_id = 1 and c.id = er.requirement_id and er.environment_id = e.id and c.version = (select max(i.version) from requirement i where i.id = c.id); 
+  declare taskRebuttalCursor cursor for
+    select 'document',xmlEscaped(dr.name),'' from task_characteristic_document pc, document_reference dr where pc.characteristic_id = tcId and pc.reference_id = dr.id and pc.characteristic_reference_type_id = 2
+    union
+    select 'persona',xmlEscaped(cr.name),c.name from task_characteristic_persona pc, persona_reference cr, persona c where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.persona_id = c.id and pc.characteristic_reference_type_id = 2
+    union
+    select 'usecase',xmlEscaped(cr.name),c.name from task_characteristic_usecase pc, usecase_reference cr, usecase c where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.usecase_id = c.id and pc.characteristic_reference_type_id = 2
+    union
+    select 'requirement',xmlEscaped(cr.name),c.name from task_characteristic_requirement pc, requirement_reference cr, requirement c, asset_requirement ar, asset a where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.requirement_id = c.id and pc.characteristic_reference_type_id = 2 and c.id = ar.requirement_id and ar.asset_id = a.id and c.version = (select max(i.version) from requirement i where i.id = c.id) 
+    union
+    select 'requirement',xmlEscaped(cr.name),c.name from task_characteristic_requirement pc, requirement_reference cr, requirement c, environment_requirement er, environment e where pc.characteristic_id = tcId and pc.reference_id = cr.id and cr.requirement_id = c.id and pc.characteristic_reference_type_id = 2 and c.id = er.requirement_id and er.environment_id = e.id and c.version = (select max(i.version) from requirement i where i.id = c.id); 
+  declare continue handler for not found set done = 1;
+
+  set buf = concat(buf,'"concept_references" : [\n');
+  set done = 0;
+  set headElement = 1;
+
+  open crCursor;
+  cr_loop : loop
+    fetch crCursor into crName,gwrType,gwrConcept,crExcerpt;
+    if done = 1
+    then
+      set buf = concat(buf,"]\n\n");
+      leave cr_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+    set buf = concat(buf,'  {"name" : "',crName,'", "concept" : "',gwrType,'", "object" : "',gwrConcept,'", "description" : "',crExcerpt,'"}\n');
+    set crCount = crCount + 1; 
+  end loop cr_loop;
+  close crCursor;
+
+  set buf = concat(buf,',"task_characteristics" : [\n');
+  set done = 0;
+  set headElement = 1;
+
+  open tcCursor;
+  tc_loop : loop
+    fetch tcCursor into tcId, taskName, modQual, tcDesc;
+    if done = 1
+    then 
+      set buf = concat(buf,"]\n\n");
+      leave tc_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+    set buf = concat(buf,'  {"task" : "',taskName,'", "modal_qualifier" : "',modQual,'", "definition" : "',tcDesc,'" : "grounds" : [');
+    set tcCount = tcCount + 1;
+
+      set done = 0;
+      set headElement = 1;
+      open taskGroundsCursor;
+      taskGrounds_loop: loop
+        fetch taskGroundsCursor into gwrType, gwrRef, gwrConcept;
+        if done = 1
+        then 
+          set buf = concat(buf,'], "warrants" : [');
+          leave taskGrounds_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
+        end if;
+        if gwrType = 'document'
+        then
+          set buf = concat(buf,'{"type" : "',gwrType,'", "reference" : "',gwrRef,'"}');
+        else
+          set buf = concat(buf,'{"type" : "',gwrType,'", "artifact" : "',gwrConcept,'", "reference" : "',gwrRef,'"}');
+        end if;
+      end loop taskGrounds_loop;
+      close taskGroundsCursor;
+
+      set done = 0;
+      set headElement = 1;
+
+      open taskWarrantCursor;
+      taskWarrant_loop: loop
+        fetch taskWarrantCursor into gwrType, gwrRef, gwrConcept;
+        if done = 1
+        then 
+          set buf = concat(buf,'], "rebuttals" : [');
+          leave taskWarrant_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
+        end if;
+        if gwrType = 'document'
+        then
+          set buf = concat(buf,'{"type" : "',gwrType,'", "reference" : "',gwrRef,'"}');
+        else
+          set buf = concat(buf,'{"type" : "',gwrType,'", "artifact" : "',gwrConcept,'", "reference" : "',gwrRef,'"}');
+        end if;
+      end loop taskWarrant_loop;
+      close taskWarrantCursor;
+
+      set done = 0;
+      set headElement = 1;
+
+      open taskRebuttalCursor;
+      taskRebuttal_loop: loop
+        fetch taskRebuttalCursor into gwrType, gwrRef, gwrConcept;
+        if done = 1
+        then 
+          set buf = concat(buf,']}\n');
+          set headElement = 0;
+          leave taskRebuttal_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
+        end if;
+        if gwrType = 'document'
+        then
+          set buf = concat(buf,'{"type" : "',gwrType,'", "reference" : "',gwrRef,'"}');
+        else
+          set buf = concat(buf,'{"type" : "',gwrType,'", "artifact" : "',gwrConcept,'", "reference" : "',gwrRef,'"}');
+        end if;
+      end loop taskRebuttal_loop;
+      close taskRebuttalCursor;
+      set done = 0;
+  end loop tc_loop;
+  close tcCursor;
+
+  select buf,crCount,tcCount;
+end
+//
+
+create procedure dataflowsToJSON()
+begin
+  declare buf LONGTEXT default '';
+  declare headElement int default 1;
+  declare done int default 0;
+  declare dfName varchar(255);
+  declare envName varchar (200);
+  declare fromName varchar (200);
+  declare fromType varchar (9);
+  declare toName varchar (200);
+  declare toType varchar (9);
+  declare assetName varchar (200);
+  declare compName varchar (200);
+  declare compType varchar (20);
+  declare tbName varchar(50);
+  declare tbDesc varchar(4000);
+  declare dfId int;
+  declare tbId int;
+  declare envId int;
+  declare dfCount int default 0;
+  declare tbCount int default 0;
+  declare dfCursor cursor for select dataflow, environment, from_name, from_type, to_name, to_type from dataflows;
+  declare tbCursor cursor for select id,name,description from trust_boundary;
+  declare tbEnvCursor cursor for select distinct environment_id from environment_trust_boundary where trust_boundary_id = tbId;
+  declare tbCompCursor cursor for
+    select uc.name,'process' from trust_boundary_usecase tbu, usecase uc where tbu.usecase_id = uc.id and trust_boundary_id = tbId and environment_id = envId
+    union
+    select a.name,'datastore' from trust_boundary_asset tba, asset a where tba.asset_id = a.id and trust_boundary_id = tbId and environment_id = envId;
+  declare dfAssetCursor cursor for select a.name from asset a, dataflow_asset da where da.dataflow_id = dfId and da.asset_id = a.id;
+  declare continue handler for not found set done = 1;
+
+  set headElement = 1;
+  set buf = concat(buf,'"dataflows": [\n');
+
+  open dfCursor;
+  df_loop: loop
+    fetch dfCursor into dfName, envName, fromName, fromType, toName, toType;
+    if done = 1
+    then
+      set buf = concat(buf,"]\n\n");
+      leave df_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+
+    set buf = concat(buf,'  {"name" : "',dfName,'", "environment" : "',envName,'", "from_name" : "',fromName,'", "from_type" : "',fromType,'", "to_name" : "',toName,'", "to_type" : "',toType,'", "assets" : [');
+    select id into envId from environment where name = envName;
+    select id into dfId from dataflow where name = dfName and environment_id = envId limit 1;
+
+    open dfAssetCursor;
+    dfAsset_loop: loop
+      fetch dfAssetCursor into assetName;
+      if done = 1
+      then 
+        set buf = concat(buf,']}');
+        leave dfAsset_loop;
+      else
+        if headElement = 1
+        then
+          set headElement = 0;
+        else
+          set buf = concat(buf,",");
+        end if;
+      end if;
+      set buf = concat(buf,'"',assetName,'"');
+    end loop dfAsset_loop;
+    close dfAssetCursor;
+    set done = 0;
+    set dfCount = dfCount + 1;
+  end loop df_loop;
+  close dfCursor;
+
+  set buf = concat(buf,',"trust_boundaries": [\n');
+  set done = 0;
+  set headElement = 1;
+  open tbCursor;
+  tb_loop: loop
+    fetch tbCursor into tbId, tbName, tbDesc;
+    if done = 1
+    then
+      set buf = concat(buf,"]\n\n");
+      leave tb_loop;
+    else
+      if headElement = 1
+      then
+        set headElement = 0;
+      else
+        set buf = concat(buf,",\n");
+      end if;
+    end if;
+    set buf = concat(buf,'  {"name" : "',tbName,'", "description" : "',tbDesc,'", "environments" : [\n');
+    open tbEnvCursor;
+    tbEnv_loop: loop
+      fetch tbEnvCursor into envId;
+      if done = 1
+      then 
+        set buf = concat(buf,']}');
+        leave tbEnv_loop;
+      else
+        if headElement = 1
+        then
+          set headElement = 0;
+        else
+          set buf = concat(buf,",\n");
+        end if;
+      end if;
+      select name into envName from environment where id = envId;
+      set buf = concat(buf,'    {"name" : "',envName,'", "components" : [');
+
+      set done = 0;
+      set headElement = 1;
+      open tbCompCursor;
+      tbComp_loop: loop
+        fetch tbCompCursor into compName, compType;
+        if done = 1
+        then
+          set buf = concat(buf,']\n    }');
+          set headElement = 0;
+          leave tbComp_loop;
+        else
+          if headElement = 1
+          then
+            set headElement = 0;
+          else
+            set buf = concat(buf,",");
+          end if;
+        end if;
+        set buf = concat(buf,'{"name" : "',compName,'", "type" : "',compType,'"}');
+      end loop tbComp_loop;
+      close tbCompCursor;
+      set done = 0;
+    end loop tbEnv_loop;
+    close tbEnvCursor;
+    set done = 0;
+    set tbCount = tbCount + 1;
+  end loop tb_loop;
+  close tbCursor;
+  select buf,dfCount;
+end
+//
+
+create procedure getUserGoals(in constraintId int)
+begin
+  if constraintId = -1
+  then
+    select drs.id, dr.name, drs.synopsis, td.name, p.name,'document_reference',gs.name from document_reference_synopsis drs, document_reference dr, persona p, trace_dimension td, goal_satisfaction gs where drs.reference_id = dr.id and drs.dimension_id = td.id and drs.actor_id = p.id and drs.satisfaction = gs.id
+    union
+    select pcs.characteristic_id,pc.description,pcs.synopsis, td.name, p.name,'persona_characteristic', gs.name from persona_characteristic_synopsis pcs, persona_characteristic pc, persona p, trace_dimension td, goal_satisfaction gs where pcs.characteristic_id = pc.id and pcs.dimension_id = td.id and pc.persona_id = p.id and pcs.satisfaction = gs.id order by 2;
+  else
+    select drs.id, dr.name, drs.synopsis, td.name, p.name, 'document_reference',gs.name from document_reference_synopsis drs, document_reference dr, persona p, trace_dimension td, goal_satisfaction gs where drs.id = constraintId and drs.reference_id = dr.id and drs.dimension_id = td.id and drs.actor_id = p.id and drs.satisfaction = gs.id
+    union
+    select pcs.characteristic_id,pc.description,pcs.synopsis, td.name, p.name, 'persona_characteristic',gs.name from persona_characteristic_synopsis pcs, persona_characteristic pc, persona p, trace_dimension td, goal_satisfaction gs where pcs.characteristic_id = constraintId and pcs.characteristic_id = pc.id and pcs.dimension_id = td.id and pc.persona_id = p.id and pcs.satisfaction = gs.id order by 2;
+  end if;
+end
+//
+
+create procedure addUserGoal(in ugId int,in refName text, in synName text, in dimName text, in personaName text, in gSat text)
+begin
+  declare refId int;
+  declare dimId int;
+  declare pId int;
+  declare gsId int;
+
+  select id into dimId from trace_dimension where name = dimName limit 1;
+  select id into pId from persona where name = personaName limit 1;
+  select id into gsId from goal_satisfaction where name = gSat limit 1;
+
+  select id into refId from document_reference where name = refName limit 1;
+  if refId is null
+  then
+    select id into refId from persona_characteristic where description = refName and persona_id = pId limit 1;
+    insert into persona_characteristic_synopsis(characteristic_id,synopsis,dimension_id,satisfaction) values (refId,synName,dimId,gsId);
+  else 
+    insert into document_reference_synopsis(id,reference_id,synopsis,dimension_id,actor_id,actor_type_id,satisfaction) values (ugId,refId,synName,dimId,pId,1,gsId);
+  end if;
+end
+//
+
+create procedure updateUserGoal(in ugId int,in refName text, in synName text, in dimName text, in personaName text, in gSat text)
+begin
+  declare refId int;
+  declare dimId int;
+  declare pId int;
+  declare gsId int;
+
+  select id into dimId from trace_dimension where name = dimName limit 1;
+  select id into pId from persona where name = personaName limit 1;
+  select id into gsId from goal_satisfaction where name = gSat limit 1;
+
+  select id into refId from document_reference where name = refName limit 1;
+  if refId is null
+  then
+    select id into refId from persona_characteristic where description = refName and persona_id = pId limit 1;
+    update persona_characteristic_synopsis set synopsis = synName, dimension_id = dimId, satisfaction = gsId where characteristic_id = refId;
+  else
+    update document_reference_synopsis set reference_id = refId, synopsis = synName, dimension_id = dimId, actor_id = pId, actor_type_id = 1, satisfaction = gsId where id = ugId;
+  end if;
+end
+//
+
+create procedure getGoalContributions(in envName text, in filterElement text)
+begin
+  if filterElement != ''
+  then
+    select source, source_type, source_dimension, source_persona,  target, target_type, target_dimension, target_persona, means_end, contribution from goal_contribution where source = filterElement and environment in (envName,'')
+    union
+    select source, source_type, source_dimension, source_persona, target, target_type, target_dimension, target_persona, means_end, contribution from goal_contribution where target = filterElement and environment in (envName,'');
+  else
+    select source, source_type, source_dimension, source_persona, target, target_type, target_dimension, target_persona, means_end, contribution from goal_contribution where environment in (envName,'');
+  end if;
+end
+//
+
+create procedure userGoalContribution(in ugId int, in envId int, inout score int) 
+begin
+  declare contScore int default 0;
+  declare linkScore int default 0;
+  declare ugScore int default 0;
+  declare cgId int;
+  declare igScore int default 0;
+  declare igScoreId int;
+  declare refCount int;
+  declare charCount int;
+  declare idCount int default 0;
+  declare obsCount int default 0;
+  declare done int default 0;
+  declare goalLinksCursor cursor for 
+    select characteristic_id, contribution_id from document_reference_contribution where reference_id = ugId and end_id = 1
+    union
+    select reference_id, contribution_id from document_reference_contribution where characteristic_id = ugId and end_id = 0;
+  declare taskContCursor cursor for select contribution_id from task_goal_contribution where reference_id = ugId and environment_id = envId;
+  declare continue handler for not found set done = 1;
+
+  if isnull(score)
+  then
+    set score = 0;
+  end if;
+
+  select satisfaction into igScoreId from document_reference_synopsis where id = ugId;
+  if igScoreId is null
+  then
+    select satisfaction into igScoreId from persona_characteristic_synopsis where characteristic_id = ugId;
+  end if;
+
+  if igScoreId is not null and igScoreId != 0
+  then
+    select value into igScore from goal_satisfaction where id = igScoreId limit 1;
+    set score = igScore;
+  else
+    select count(*) into obsCount from user_system_goal_link usgl, goalobstacle_goalassociation ga where usgl.user_goal_id = ugId and usgl.system_goal_id = ga.goal_id and ga.environment_id = envId;
+    if obsCount > 0
+    then
+      set score = -100;
+    else
+      select count(id) into idCount from temp_gid where id = ugId;
+      if idCount = 0
+      then
+        insert into temp_gid(id) values (ugId);
+        set done = 0;
+        open taskContCursor;
+        tc_loop: loop
+          fetch taskContCursor into linkScore;
+          if done = 1
+          then
+            leave tc_loop;
+          end if;
+          select value into contScore from link_contribution where id = linkScore;
+          set score = score + contScore;
+        end loop tc_loop;
+        close taskContCursor;
+
+        set done = 0;
+        open goalLinksCursor;
+        gl_loop: loop
+          fetch goalLinksCursor into cgId, linkScore;
+          if done = 1
+          then
+            leave gl_loop;
+          end if;
+          call userGoalContribution(cgId,envId,ugScore);
+
+          select value into contScore from link_contribution where id = linkScore;
+          set ugScore = ugScore * contScore;
+          set score = score + ugScore;
+        end loop gl_loop;
+        close goalLinksCursor;
+
+        if score > 100 or score < -100
+        then
+          set score = score / 100;
+          if score < -100
+          then
+            set score = -100;
+          elseif score > 100
+          then
+            set score = 100;
+          end if; 
+        end if;
+      end if;
+    end if;
+  end if;
+end
+//
+
+create procedure calculateGoalScore(in goalName text, in envName text)
+begin
+  declare score int default 0;
+  declare ugId int;
+  declare envId int;
+  declare gsScoreId int;
+
+  drop table if exists temp_gid;
+  create temporary table temp_gid (id int not null);
+
+  select id into envId from environment where name = envName limit 1;
+  
+  select id into ugId from document_reference_synopsis where synopsis = goalName limit 1;
+  if ugId is null
+  then
+    select characteristic_id into ugId from persona_characteristic_synopsis where synopsis = goalName limit 1;
+    select satisfaction into gsScoreId from persona_characteristic_synopsis where characteristic_id = ugId;
+  else
+    select satisfaction into gsScoreId from document_reference_synopsis where id = ugId;
+  end if;
+
+  select value into score from goal_satisfaction where id = gsScoreId;
+
+  call userGoalContribution(ugId,envId,score);
+  select score;
+end
+//
+
+create procedure addTaskContribution(in src text, in dest text, in env text, in cont text)
+begin
+  declare taskId int;
+  declare ugId int;
+  declare envId int;
+  declare lcId int;
+
+  select id into taskId from task where name = src limit 1;
+  select id into lcId from link_contribution where name = cont limit 1;
+  select id into envId from environment where name = env limit 1;
+
+  select id into ugId from document_reference_synopsis where synopsis = dest limit 1;
+  if ugId is null
+  then
+    select characteristic_id into ugId from persona_characteristic_synopsis where synopsis = dest limit 1;
+  end if;
+
+  insert into task_goal_contribution(task_id,environment_id,reference_id,contribution_id) values(taskId,envId,ugId,lcId);
+end
+//
+
+create procedure updateTaskContribution(in src text, in dest text, in env text, in cont text)
+begin
+  declare taskId int;
+  declare ugId int;
+  declare envId int;
+  declare lcId int;
+
+  select id into taskId from task where name = src limit 1;
+  select id into lcId from link_contribution where name = cont limit 1;
+  select id into envId from environment where name = env limit 1;
+
+  select id into ugId from document_reference_synopsis where synopsis = dest limit 1;
+  if ugId is null
+  then
+    select characteristic_id into ugId from persona_characteristic_synopsis where synopsis = dest limit 1;
+  end if;
+
+  update task_goal_contribution set contribution_id = lcId where task_id = taskId and reference_id = ugId and environment_id = envId;
+end
+//
+
+create procedure ugm_filterNames(in envName text)
+begin
+  if envName != ''
+  then
+    select source from goal_contribution where environment = envName
+    union
+    select target from goal_contribution where environment = envName order by 1;
+  else
+    select source from goal_contribution
+    union
+    select target from goal_contribution order by 1;
+  end if;
+end
+//
+
+create procedure delete_user_goal(in ugId int)
+begin
+  declare pcsCount int;
+
+  call deleteUserGoalComponents(ugId);
+
+  select count(characteristic_id) into pcsCount from persona_characteristic_synopsis where characteristic_id = ugId;
+
+  if pcsCount > 0
+  then
+    delete from persona_characteristic_synopsis where characteristic_id = ugId;
+  else
+    call delete_reference_synopsis(ugId);
+  end if;
+end
+//
+
+create procedure getGoalContributionsTable(in src text, in tgt text)
+begin
+  if src != '-1' and tgt != '-1'
+  then
+    select source, source_type, target, target_type, means_end, contribution from goal_contribution_table where source = src and target = tgt;
+  else
+    select source, source_type, target, target_type, means_end, contribution from goal_contribution_table;
+  end if;
+end
+//
+
+create procedure deleteGoalContribution(in src text, in tgt text)
+begin
+  declare srcId int;
+  declare tgtId int;
+
+  select id into srcId from document_reference_synopsis where synopsis = src limit 1;
+  if srcId is null
+  then
+    select characteristic_id into srcId from persona_characteristic_synopsis where synopsis = src limit 1;
+  end if;
+
+  select id into tgtId from document_reference_synopsis where synopsis = tgt limit 1;
+  if tgtId is null
+  then
+    select characteristic_id into tgtId from persona_characteristic_synopsis where synopsis = tgt limit 1;
+  end if;
+
+  delete from document_reference_contribution where reference_id = srcId and characteristic_id = tgtId;
+end
+//
+
+create procedure document_reference_synopsisNames() 
+begin
+  select synopsis from document_reference_synopsis order by 1;
+end
+//
+
+create procedure getTaskContributions(in taskName text, in envName text)
+begin
+  declare taskId int;
+  declare envId int;
+
+  select id into taskId from task where name = taskName limit 1;
+  select id into envId from environment where name = envName limit 1;
+
+  select drs.synopsis, lc.name from task_goal_contribution tgc, environment_task et, link_contribution lc, document_reference_synopsis drs where tgc.task_id = taskId and tgc.environment_id = envId and tgc.environment_id = et.environment_id and tgc.reference_id = drs.id and tgc.contribution_id = lc.id
+  union
+  select pcs.synopsis, lc.name from task_goal_contribution tgc, environment_task et, link_contribution lc, persona_characteristic_synopsis pcs where tgc.task_id = taskId and tgc.environment_id = envId and tgc.environment_id = et.environment_id and tgc.reference_id = pcs.characteristic_id and tgc.contribution_id = lc.id;
+end
+//
+
+create procedure user_goalNames(in dummyValue text)
+begin
+  select synopsis from document_reference_synopsis
+  union
+  select synopsis from persona_characteristic_synopsis order by 1;
+end
+//
+
+create procedure userGoalLoopCheck()
+begin
+  declare li int default 0;
+  declare ugId int;
+  declare ugName varchar(1000);
+  declare done int default 0;
+  declare ugCursor cursor for select distinct reference_id from document_reference_contribution;
+  declare continue handler for not found set done = 1;
+
+  open ugCursor;
+  ug_loop: loop
+    fetch ugCursor into ugId;
+    if done = 1
+    then
+      leave ug_loop;
+    end if;
+    call inLoop(ugId,ugId,li);
+    if li = 1
+    then
+      select synopsis into ugName from synopsis where id = ugId;
+      insert into temp_vout(label,message) values('User Goal Contribution loop',concat(ugName,' is in a user goal contribution loop.'));
+    end if;
+  end loop ug_loop;
+  close ugCursor;
+  
+end
+//
+
+create procedure inLoop(in origId int, ugId int, out inLoop int) 
+begin
+  declare dgId int;
+  declare done int default 0;
+  declare contCursor cursor for
+    select characteristic_id from document_reference_contribution where reference_id = ugId and end_id = 0
+    union
+    select reference_id from document_reference_contribution where characteristic_id = ugId and end_id = 1;
+  declare continue handler for not found set done = 1;
+
+  set inLoop = 0;
+
+  open contCursor;
+  cont_loop: loop
+    fetch contCursor into dgId;
+    if done = 1 or inLoop = 1
+    then
+      leave cont_loop;
+    end if;
+    
+    if dgId = origId
+    then
+      set inLoop = 1;
+      leave cont_loop;
+    else
+      call inLoop(origId,dgId,inLoop);
+    end if;
+  end loop cont_loop;
+  close contCursor;
+end
+//
+
+create procedure conflictingPersonaCharacteristics(in pName text, in synName text)
+begin
+  declare synId int;
+  declare pId int;
+  declare pcPId int;
+  declare refId int;
+  declare isConflict int default 0;
+  declare done int default 0;
+  declare pcCursor cursor for select pc.persona_id from persona_characteristic pc, persona_characteristic_document pcd where pc.id = pcd.characteristic_id and pcd.reference_id = refId;
+  declare continue handler for not found set done = 1;
+
+  select id into pId from persona where name = pName limit 1;
+
+  select id into synId from document_reference_synopsis where synopsis = synName limit 1;
+  if synId is null
+  then
+    select characteristic_id into synId from persona_characteristic_synopsis where synopsis = synName limit 1;
+    select persona_id into pcPId from persona_characteristic where id = synId limit 1;
+    if pcPId != pId
+    then
+      select concat(pc.description,' (',p.name,')') from persona_characteristic pc, persona_characteristic_synopsis pcs, persona p where pcs.synopsis = synName and pcs.characteristic_id = pc.id and pc.persona_id = p.id;
+    else
+      select '';
+    end if;
+  else
+    select reference_id into refId from document_reference_synopsis where id = synId limit 1;
+    open pcCursor;
+    pc_loop: loop
+      fetch pcCursor into pcPId;
+      if done = 1 or isConflict = 1
+      then
+        leave pc_loop;
+      end if;
+    
+      if pId != pcPId
+      then
+        set isConflict = 1;
+        leave pc_loop;
+      end if;
+    end loop pc_loop;
+    close pcCursor;
+
+    if isConflict = 1
+    then
+      select concat(pc.description,' (',p.name,')') from persona_characteristic pc, document_reference_contribution drc, persona p where drc.reference_id = synId and drc.characteristic_id = pc.id and pc.persona_id = p.id;
+    end if;
+  end if;
+end
+//
+
+create procedure obstructedGoalDependencies(in environmentId int)
+begin
+  declare done int default 0;
+  declare goalId int;
+  declare isObstructed bool default 0;
+  declare dependerName varchar(255);
+  declare dependeeName varchar(255);
+  declare obstrGoalName varchar(100);
+  declare depCursor cursor for select dr.name, de.name, g.name,g.id from goal g, rolegoalrole_dependency rgr, role dr, role de where rgr.environment_id = environmentId and rgr.dependency_id = g.id and rgr.depender_id = dr.id and rgr.dependee_id = de.id order by 1;
+  declare continue handler for not found set done = 1;
+
+  drop table if exists temp_gid;
+  create temporary table temp_gid (id int not null);
+
+  open depCursor;
+  dep_loop: loop
+    fetch depCursor into dependerName, dependeeName, obstrGoalName, goalId;
+    if done = 1
+    then
+      leave dep_loop;
+    end if;
+    call isGoalObstructed(goalId,environmentId,1,isObstructed);
+    if isObstructed = true
+    then
+      insert into temp_vout(label,message) values ('Implicit vulnerability',concat(dependerName, ' depends on ',dependeeName,' for goal ',obstrGoalName,', but this goal is obstructed or denied.'));
+    end if;
+  end loop dep_loop;
+  close depCursor;
+end
+//
+
+create procedure addUserSystemGoalLink(in ugName text, in sgName text)
+begin
+  declare ugId int;
+  declare sgId int;
+
+  select id into sgId from goal where name = sgName limit 1;
+  select id into ugId from document_reference_synopsis where synopsis = ugName limit 1;
+  if ugId is null
+  then
+    select characteristic_id into ugId from persona_characteristic_synopsis where synopsis = ugName limit 1;
+  end if;
+
+  insert into user_system_goal_link(user_goal_id,system_goal_id) values (ugId,sgId);
+end
+//
+
+create procedure deleteUserGoalComponents(in ugId int)
+begin
+  delete from user_system_goal_link where user_goal_id = ugId;
+end
+//
+
+create procedure userGoalSystemGoals(in ugId int)
+begin
+  select g.name from user_system_goal_link usgl, goal g where usgl.user_goal_id = ugId and usgl.system_goal_id = g.id order by 1;
+end
+//
+
+create procedure deniedUserGoalDependencies(in environmentId int)
+begin
+  declare done int default 0;
+  declare goalId int;
+  declare isDenied bool default 0;
+  declare dependerName varchar(255);
+  declare dependeeName varchar(255);
+  declare obstrGoalName varchar(100);
+  declare depCursor cursor for select dr.name, de.name, g.name,g.id from goal g, rolegoalrole_dependency rgr, role dr, role de where rgr.environment_id = environmentId and rgr.dependency_id = g.id and rgr.depender_id = dr.id and rgr.dependee_id = de.id order by 1;
+  declare continue handler for not found set done = 1;
+
+  open depCursor;
+  dep_loop: loop
+    fetch depCursor into dependerName, dependeeName, obstrGoalName, goalId;
+    if done = 1
+    then
+      leave dep_loop;
+    end if;
+    call isGoalDenied(goalId,environmentId,isDenied);
+    if isDenied = true
+    then
+      insert into temp_vout(label,message) values ('Implicit vulnerability',concat(dependerName, ' depends on ',dependeeName,' for goal ',obstrGoalName,', but one or more related user goals is denied.'));
+    end if;
+  end loop dep_loop;
+  close depCursor;
+end
+//
+
+create procedure isGoalDenied(in goalId int,in environmentId int, out isDenied bool) 
+begin
+  declare score int default 0;
+  declare done int default 0;
+  declare ugId int;
+  declare ugCursor cursor for select user_goal_id from user_system_goal_link where system_goal_id = goalId;
+  declare continue handler for not found set done = 1;
+
+  open ugCursor;
+  ug_loop: loop
+    fetch ugCursor into ugId;
+    if done = 1
+    then
+      leave ug_loop;
+    end if;
+    call userGoalContribution(ugId,environmentId,score);
+    if score < 0
+    then
+      set isDenied = 1;
+      leave ug_loop;
+    end if;
+  end loop ug_loop;
+  close ugCursor;
+
+
 end
 //
 

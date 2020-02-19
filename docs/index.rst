@@ -27,7 +27,7 @@ CAIRIS documentation
    domainproperties
    gro
    usecases
-   grl
+   usergoals
    dependencies
    patterns
    vulnerabilities
@@ -45,6 +45,7 @@ CAIRIS documentation
    tags
    gendoc
    api
+   extending
    troubleshooting
 
 

@@ -133,10 +133,17 @@ def propertiesToPara(ts):
   return paraTxt
 
 def extractImageFile(p,tmpDir,fileName):
-  buf,mimeType = p.getImage(fileName)
-  buf = b64decode(buf)
-  fp = io.BytesIO(buf)
+  imgResponse = p.getImage(fileName)
   b = Borg()
+  buf = mimeType = fp = None
+  if (imgResponse == None):
+    buf = open(b.staticDir + '/default-avatar.png','rb').read()
+    mimeType = 'image/png'
+  else:
+    buf = imgResponse[0]
+    mimeType = imgResponse[1]
+    buf = b64decode(buf)
+  fp = io.BytesIO(buf)
   f = open(b.tmpDir + '/' + fileName,'wb')
   f.write(fp.getvalue())
   f.close()
@@ -835,9 +842,9 @@ def tasks(p,docDir,fileSuffix = 'svg'):
   durationLookup['High'] = 'Hours or longer' 
 
   frequencyLookup = {}
-  frequencyLookup['High'] = 'Hourly or more'
+  frequencyLookup['High'] = 'Monthly or less'
   frequencyLookup['Medium'] = 'Daily - Weekly'
-  frequencyLookup['Low'] = 'Monthly or less'
+  frequencyLookup['Low'] = 'Hourly or more'
   frequencyLookup['None'] = 'None'
 
   for idx,task in tasks.items():
@@ -988,7 +995,7 @@ def buildPersonaRationale(p,personaName,docDir,chapterTxt,fileSuffix):
     chapterTxt += """
         <section><title>External Documents</title>
     """
-    chapterTxt += buildTable( personaName.replace(" ","_") + "ExternalDocumentReferencesTable",personaName + " External Documents",['Document','Version','Authors','Date'],edRefs,0)
+    chapterTxt += buildTable( personaName.replace(" ","_") + "ExternalDocumentReferencesTable",personaName + " External Documents",['Document','Version','Authors','Date','Description'],edRefs,0)
     chapterTxt += """
         </section>
     """

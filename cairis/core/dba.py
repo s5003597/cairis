@@ -18,9 +18,11 @@
 
 import MySQLdb
 from .ARM import *
-import _mysql_exceptions 
+from MySQLdb._exceptions import DatabaseError, IntegrityError
 from .Borg import Borg
 import os
+from random import choice
+import string
 
 __author__ = 'Shamal Faily'
 
@@ -44,7 +46,7 @@ def dbtoken(rPasswd,dbHost,dbPort,dbUser):
     rootCursor.close()
     rootConn.close()
     return t[0]
-  except _mysql_exceptions.DatabaseError as e:
+  except DatabaseError as e:
     exceptionText = 'MySQL error getting token for ' + dbUser + ': ' + format(e)
     raise DatabaseProxyException(exceptionText) 
 
@@ -76,7 +78,7 @@ def runAdminCommands(adminPasswd,dbHost,dbPort,stmts,adminUser='root'):
       rootCursor.execute(stmt)
     rootCursor.close()
     rootConn.close()
-  except _mysql_exceptions.DatabaseError as e:
+  except DatabaseError as e:
     exceptionText = 'MySQL error running "' + ', '.join(stmts) + '": message:' + format(e) 
     raise DatabaseProxyException(exceptionText) 
 
@@ -93,6 +95,9 @@ def createDbOwnerDatabase(rPasswd,dbHost,dbPort):
   runAdminCommands(rPasswd,dbHost,dbPort,stmts)
 
 def createDatabaseAndPrivileges(rPasswd,dbHost,dbPort,dbUser,dbPasswd,dbName):
+  collationString = 'general'
+  if (MySQLdb.get_client_info()[0] == '8'):
+    collationString = '0900_ai'
   dbUser = canonicalDbUser(dbUser)
   dbName = canonicalDbName(dbName)
   stmts = ['drop database if exists `' + dbName + '`',
@@ -100,7 +105,7 @@ def createDatabaseAndPrivileges(rPasswd,dbHost,dbPort,dbUser,dbPasswd,dbName):
            'create database ' + dbName,
            "grant all privileges on `" + dbName + "`.* TO '" + dbUser + "'@'%'",
            'alter database ' + dbName + ' default character set utf8mb4',
-           'alter database ' + dbName + ' default collate utf8mb4_general_ci',
+           'alter database ' + dbName + ' default collate utf8mb4_' + collationString + '_ci',
            'flush tables',
            'flush privileges',
            'insert into cairis_owner.db_owner(db,owner) values("' + dbName + '","' + dbUser + '")',
@@ -110,7 +115,6 @@ def createDatabaseAndPrivileges(rPasswd,dbHost,dbPort,dbUser,dbPasswd,dbName):
 def dropCairisUserDatabase(rPasswd,dbHost,dbPort):
   stmts = ['drop database if exists cairis_user']
   runAdminCommands(rPasswd,dbHost,dbPort,stmts)
-
 
 def createCairisUserDatabase(rPasswd,dbHost,dbPort):
   stmts = ['create database if not exists cairis_user',
@@ -144,7 +148,7 @@ def rootResponseList(sqlTxt):
     rootCursor.close()
     rootConn.close()
     return responseList
-  except _mysql_exceptions.DatabaseError as e:
+  except DatabaseError as e:
     exceptionText = 'MySQL error getting responses: ' + format(e)
     raise DatabaseProxyException(exceptionText) 
 
@@ -182,3 +186,38 @@ def dbUsers(dbName):
     return []
   else:
     return rows
+
+def accounts(rPasswd,dbHost,dbPort):
+  sqlTxt = 'select email from cairis_user.auth_user'
+  return rootResponseList(sqlTxt)
+
+def dropUser(rPasswd,dbHost,dbPort,email):
+  dbUser = canonicalDbUser(email)
+  stmts = []
+  for dbName,dbOwner in databases(dbUser):
+    stmts.append('drop database if exists ' + dbName)
+    stmts.append('flush privileges')
+    stmts.append('delete from cairis_owner.db_owner where db = "' + dbName + '"')
+  stmts.append('drop user if exists ' + dbUser)
+  stmts.append('flush privileges')
+  stmts.append('delete from cairis_user.auth_user where email = "' + email + '"')
+  stmts.append('commit')
+  runAdminCommands(rPasswd,dbHost,dbPort,stmts)
+
+def resetUser(cairisRoot,rPasswd,dbHost,dbPort,email):
+  dbUser = canonicalDbUser(email)
+  stmts = []
+  for dbName,dbOwner in databases(dbUser):
+    stmts.append('drop database if exists ' + dbName)
+    stmts.append('flush privileges')
+    stmts.append('delete from cairis_owner.db_owner where db = "' + dbName + '"')
+    stmts.append('commit')
+  runAdminCommands(rPasswd,dbHost,dbPort,stmts)
+  rp = dbtoken(rPasswd,dbHost,dbPort,email)
+  createDatabaseAndPrivileges(rPasswd,dbHost,dbPort,dbUser,rp,dbUser + '_default')
+  createDatabaseSchema(cairisRoot,dbHost,dbPort,email,rp,dbUser + '_default')
+  createDefaults(cairisRoot,dbHost,dbPort,email,rp,dbUser + '_default')
+
+def resetUsers(cairisRoot,rPasswd,dbHost,dbPort):
+  for email in accounts(rPasswd,dbHost,dbPort):
+    resetUser(cairisRoot,rPasswd,dbHost,dbPort,email)

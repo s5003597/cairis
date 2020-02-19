@@ -24,6 +24,7 @@ from cairis.data.CairisDAO import CairisDAO
 from cairis.tools.ModelDefinitions import DocumentReferenceModel
 from cairis.tools.SessionValidator import check_required_keys
 from cairis.tools.JsonConverter import json_serialize, json_deserialize
+import re
 
 __author__ = 'Shamal Faily'
 

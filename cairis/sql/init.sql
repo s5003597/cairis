@@ -30,6 +30,8 @@ DROP VIEW IF EXISTS countermeasure_threat_response_target;
 DROP VIEW IF EXISTS redmine_requirement;
 DROP VIEW IF EXISTS synopsis;
 DROP VIEW IF EXISTS contribution;
+DROP VIEW IF EXISTS goal_contribution;
+DROP VIEW IF EXISTS goal_contribution_table;
 DROP VIEW IF EXISTS source_reference;
 DROP VIEW IF EXISTS environment_role;
 DROP VIEW IF EXISTS detection_mechanism;
@@ -61,6 +63,7 @@ DROP VIEW IF EXISTS goal_associations;
 DROP VIEW IF EXISTS riskModel_tagged;
 DROP VIEW IF EXISTS conceptMapModel_all;
 
+DROP TABLE IF EXISTS task_goal_contribution;
 DROP TABLE IF EXISTS trust_boundary_usecase;
 DROP TABLE IF EXISTS trust_boundary_asset;
 DROP TABLE IF EXISTS trust_boundary_privilege;
@@ -83,6 +86,7 @@ DROP TABLE IF EXISTS usecase_pc_contribution;
 DROP TABLE IF EXISTS usecase_tc_contribution;
 DROP TABLE IF EXISTS usecase_dr_contribution;
 DROP TABLE IF EXISTS ice_ic_contribution;
+DROP TABLE IF EXISTS user_system_goal_link;
 DROP TABLE IF EXISTS document_reference_contribution;
 DROP TABLE IF EXISTS requirement_reference_contribution;
 DROP TABLE IF EXISTS document_reference_synopsis;
@@ -91,6 +95,7 @@ DROP TABLE IF EXISTS persona_characteristic_synopsis;
 DROP TABLE IF EXISTS task_characteristic_synopsis;
 DROP TABLE IF EXISTS contribution_end;
 DROP TABLE IF EXISTS link_contribution;
+DROP TABLE IF EXISTS goal_satisfaction;
 DROP TABLE IF EXISTS task_tag;
 DROP TABLE IF EXISTS usecase_tag;
 DROP TABLE IF EXISTS persona_tag;
@@ -2637,6 +2642,14 @@ CREATE TABLE contribution_end (
 CREATE TABLE link_contribution (
   id INT NOT NULL,
   name VARCHAR(100) NOT NULL,
+  value INT NOT NULL,
+  PRIMARY KEY(id)
+) ENGINE=INNODB;
+
+CREATE TABLE goal_satisfaction (
+  id INT NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  value INT NOT NULL,
   PRIMARY KEY(id)
 ) ENGINE=INNODB;
 
@@ -2644,8 +2657,10 @@ CREATE TABLE persona_characteristic_synopsis (
   characteristic_id INT NOT NULL,
   synopsis VARCHAR(1000) NOT NULL,
   dimension_id INT NOT NULL,
+  satisfaction INT NOT NULL DEFAULT 0,
   PRIMARY KEY(characteristic_id),
   FOREIGN KEY(characteristic_id) REFERENCES persona_characteristic(id),
+  FOREIGN KEY(satisfaction) REFERENCES goal_satisfaction(id),
   FOREIGN KEY(dimension_id) REFERENCES trace_dimension(id)
 ) ENGINE=INNODB;
 
@@ -2668,9 +2683,11 @@ CREATE TABLE document_reference_synopsis (
   dimension_id INT NOT NULL,
   actor_id INT NOT NULL,
   actor_type_id INT NOT NULL,
+  satisfaction INT NOT NULL DEFAULT 0,
   PRIMARY KEY(id),
   FOREIGN KEY(reference_id) REFERENCES document_reference(id),
   FOREIGN KEY(dimension_id) REFERENCES trace_dimension(id),
+  FOREIGN KEY(satisfaction) REFERENCES goal_satisfaction(id),
   FOREIGN KEY(actor_type_id) REFERENCES trace_dimension(id)
 ) ENGINE=INNODB;
 
@@ -2744,9 +2761,15 @@ CREATE TABLE document_reference_contribution (
   end_id INT NOT NULL,
   contribution_id INT NOT NULL,
   PRIMARY KEY(reference_id,characteristic_id),
-  FOREIGN KEY(reference_id) REFERENCES document_reference_synopsis(id),
   FOREIGN KEY(end_id) REFERENCES contribution_end(id),
   FOREIGN KEY(contribution_id) REFERENCES link_contribution(id)
+) ENGINE=INNODB;
+
+CREATE TABLE user_system_goal_link (
+  user_goal_id INT NOT NULL,
+  system_goal_id INT NOT NULL,
+  PRIMARY KEY(user_goal_id,system_goal_id),
+  FOREIGN KEY(system_goal_id) REFERENCES goal(id)
 ) ENGINE=INNODB;
 
 CREATE TABLE requirement_reference_contribution (
@@ -3412,6 +3435,17 @@ CREATE TABLE image (
   PRIMARY KEY(name)
 ) ENGINE=INNODB;
 
+CREATE TABLE task_goal_contribution (
+  task_id INT NOT NULL,
+  environment_id INT NOT NULL,
+  reference_id INT NOT NULL,
+  contribution_id INT NOT NULL,
+  PRIMARY KEY (task_id,environment_id,reference_id),
+  FOREIGN KEY(task_id) REFERENCES task(id),
+  FOREIGN KEY(environment_id) REFERENCES environment(id)
+) ENGINE=INNODB;
+  
+
 delimiter //
 
 create function internalDocumentQuotationString(idName text, startIdx int, endIdx int) 
@@ -3559,6 +3593,28 @@ CREATE VIEW contribution as
   select usecase_id, characteristic_id, end_id, contribution_id from usecase_pc_contribution
   union
   select usecase_id, characteristic_id, end_id, contribution_id from usecase_tc_contribution;
+
+CREATE VIEW goal_contribution as
+  select e.name environment, drs.synopsis source, 'document_reference' source_type, tds.name source_dimension, sp.name source_persona, pcs.synopsis target, 'persona_characteristic' target_type, tdd.name target_dimension, tp.name target_persona, ce.name means_end, lc.name contribution from document_reference_contribution drc, document_reference_synopsis drs, persona_characteristic_synopsis pcs, trace_dimension tds, trace_dimension tdd, contribution_end ce, link_contribution lc, persona_characteristic pc, environment_persona ep, environment e, persona sp, persona tp where drc.reference_id = drs.id and drc.characteristic_id = pcs.characteristic_id and drs.dimension_id = tds.id and pcs.dimension_id = tdd.id and drc.end_id = ce.id and drc.contribution_id = lc.id and pcs.characteristic_id = pc.id and pc.persona_id = ep.persona_id and ep.environment_id = e.id and drs.actor_id = sp.id and ep.persona_id = tp.id
+  union
+  select e.name environment, pcs.synopsis source, 'persona_characteristic' source_type, tds.name source_dimension, sp.name source_persona, drs.synopsis target, 'document_reference' target_type, tdd.name target_dimension, tp.name target_persona, ce.name means_end, lc.name contribution from document_reference_contribution drc, document_reference_synopsis drs, persona_characteristic_synopsis pcs, trace_dimension tds, trace_dimension tdd, contribution_end ce, link_contribution lc, persona_characteristic pc, environment_persona ep, environment e, persona sp, persona tp where drc.characteristic_id = drs.id and drc.reference_id = pcs.characteristic_id and drs.dimension_id = tdd.id and pcs.dimension_id = tds.id and drc.end_id = ce.id and drc.contribution_id = lc.id and pcs.characteristic_id = pc.id and pc.persona_id = ep.persona_id and ep.environment_id = e.id and ep.persona_id = sp.id and drs.actor_id = tp.id
+  union
+  select '' environment, drs.synopsis source, 'document_reference' source_type, tds.name source_dimension, sp.name source_persona, drst.synopsis target, 'document_reference' target_type, tdd.name target_dimension, tp.name target_persona, ce.name means_end, lc.name contribution from document_reference_contribution drc, document_reference_synopsis drs, document_reference_synopsis drst, trace_dimension tds, trace_dimension tdd, contribution_end ce, link_contribution lc, persona sp, persona tp where drc.reference_id = drs.id and drc.characteristic_id = drst.id and drs.dimension_id = tds.id and drst.dimension_id = tdd.id and drc.end_id = ce.id and drc.contribution_id = lc.id and drs.actor_id = sp.id and drst.actor_id = tp.id
+  union
+  select e.name environment, pcs2.synopsis source, 'persona_characteristic' source_type, tds.name source_dimension, sp.name source_persona, pcs.synopsis target, 'persona_characteristic' target_type, tdd.name target_dimension, tp.name target_persona, ce.name means_end, lc.name contribution from document_reference_contribution drc, persona_characteristic_synopsis pcs2, persona_characteristic_synopsis pcs, trace_dimension tds, trace_dimension tdd, contribution_end ce, link_contribution lc, persona_characteristic pc, persona_characteristic pc2, environment_persona ep, environment_persona ep2, environment e, persona sp, persona tp where drc.reference_id = pcs2.characteristic_id and drc.characteristic_id = pcs.characteristic_id and pcs2.dimension_id = tds.id and pcs.dimension_id = tdd.id and drc.end_id = ce.id and drc.contribution_id = lc.id and pcs.characteristic_id = pc.id and pcs2.characteristic_id = pc2.id and pc.persona_id = ep.persona_id and pc2.persona_id = ep2.persona_id and ep2.environment_id = ep.environment_id and ep.environment_id = e.id and ep2.persona_id = sp.id and ep.persona_id = tp.id
+  union
+  select e.name environment, t.name source, 'task' source_type, 'task' source_dimension, '' source_persona, drs.synopsis target, 'document_reference' target_type, tdd.name target_dimension, tp.name target_persona,  'means' means_end, lc.name contribution from task_goal_contribution tgc, task t, environment e, environment_task et, trace_dimension tdd, link_contribution lc, document_reference_synopsis drs, persona tp where et.environment_id = e.id and et.task_id = t.id and tgc.task_id = et.task_id and tgc.environment_id = et.environment_id and tgc.reference_id = drs.id and tgc.contribution_id = lc.id and drs.dimension_id = tdd.id and drs.actor_id = tp.id
+  union
+  select e.name environment, t.name source, 'task' source_type, 'task' source_dimension, '' source_persona, pcs.synopsis target, 'persona_characteristic' target_type, tdd.name target_dimension, tp.name target_persona,  'means' means_end, lc.name contribution from task_goal_contribution tgc, task t, environment e, environment_task et, trace_dimension tdd, link_contribution lc, persona_characteristic_synopsis pcs, persona_characteristic pc, persona tp where et.environment_id = e.id and et.task_id = t.id and tgc.task_id = et.task_id and tgc.environment_id = et.environment_id and tgc.reference_id = pcs.characteristic_id and tgc.contribution_id = lc.id and pcs.dimension_id = tdd.id and pcs.characteristic_id = pc.id and pc.persona_id = tp.id;
+
+CREATE VIEW goal_contribution_table as
+  select drs.synopsis source, 'document_reference' source_type, pcs.synopsis target, 'persona_characteristic' target_type, ce.name means_end, lc.name contribution from document_reference_contribution drc, document_reference_synopsis drs, persona_characteristic_synopsis pcs, contribution_end ce, link_contribution lc where drc.reference_id = drs.id and drc.characteristic_id = pcs.characteristic_id and drc.end_id = ce.id and drc.contribution_id = lc.id
+  union
+  select pcs.synopsis source, 'persona_characteristic' source_type, drs.synopsis target, 'document_reference' target_type, ce.name means_end, lc.name contribution from document_reference_contribution drc, document_reference_synopsis drs, persona_characteristic_synopsis pcs, contribution_end ce, link_contribution lc where drc.characteristic_id = drs.id and drc.reference_id = pcs.characteristic_id and drc.end_id = ce.id and drc.contribution_id = lc.id
+  union
+  select drs.synopsis source, 'document_reference' source_type, drst.synopsis target, 'document_reference' target_type, ce.name means_end, lc.name contribution from document_reference_contribution drc, document_reference_synopsis drs, document_reference_synopsis drst, contribution_end ce, link_contribution lc where drc.reference_id = drs.id and drc.characteristic_id = drst.id and drc.end_id = ce.id and drc.contribution_id = lc.id
+  union
+  select pcs2.synopsis source, 'persona_characteristic' source_type, pcs.synopsis target, 'persona_characteristic' target_type, ce.name means_end, lc.name contribution from document_reference_contribution drc, persona_characteristic_synopsis pcs2, persona_characteristic_synopsis pcs, contribution_end ce, link_contribution lc where drc.reference_id = pcs2.characteristic_id and drc.characteristic_id = pcs.characteristic_id and drc.end_id = ce.id and drc.contribution_id = lc.id;
 
 CREATE VIEW usecase_step_synopsis_actor as
   select uss.id,uss.usecase_id,uss.step_no,uss.environment_id,uss.synopsis,r.name actor,td.name actor_type from usecase_step_synopsis uss, role r, trace_dimension td where uss.actor_id = r.id and uss.actor_type_id = td.id
@@ -4084,7 +4140,7 @@ CREATE VIEW conceptMapModel_all as
 
 
 
-INSERT INTO version (major,minor,patch) VALUES (2,2,2);
+INSERT INTO version (major,minor,patch) VALUES (2,3,1);
 INSERT INTO attributes (id,name) VALUES (103,'did');
 INSERT INTO trace_dimension values (0,'requirement');
 INSERT INTO trace_dimension values (1,'persona');
@@ -4108,6 +4164,7 @@ INSERT INTO trace_dimension values (18,'usecase');
 INSERT INTO trace_dimension values (19,'softgoal');
 INSERT INTO trace_dimension values (20,'document_reference');
 INSERT INTO trace_dimension values (21,'component');
+INSERT INTO trace_dimension values (22,'belief');
 INSERT INTO severity values (0,'Negligible','');
 INSERT INTO severity values (1,'Marginal','');
 INSERT INTO severity values (2,'Critical','');
@@ -4339,12 +4396,17 @@ INSERT INTO tension(id,name,short_code) values(0,'None','none');
 INSERT INTO tension(id,name,short_code) values(1,'Complementary','complementary');
 insert into contribution_end (id,name) values (0,'means');
 insert into contribution_end (id,name) values (1,'end');
-insert into link_contribution (id,name) values (3,'Make');
-insert into link_contribution (id,name) values (2,'SomePositive');
-insert into link_contribution (id,name) values (1,'Help');
-insert into link_contribution (id,name) values (-1,'Hurt');
-insert into link_contribution (id,name) values (-2,'SomeNegative');
-insert into link_contribution (id,name) values (-3,'Break');
+insert into link_contribution (id,name,value) values (3,'Make',100);
+insert into link_contribution (id,name,value) values (2,'SomePositive',50);
+insert into link_contribution (id,name,value) values (1,'Help',25);
+insert into link_contribution (id,name,value) values (-1,'Hurt',-25);
+insert into link_contribution (id,name,value) values (-2,'SomeNegative',-50);
+insert into link_contribution (id,name,value) values (-3,'Break',-100);
+insert into goal_satisfaction (id,name,value) values (2,'Satisfied',100);
+insert into goal_satisfaction (id,name,value) values (1,'Weakly Satisfied',50);
+insert into goal_satisfaction (id,name,value) values (0,'None',0);
+insert into goal_satisfaction (id,name,value) values (-1,'Weakly Denied',-50);
+insert into goal_satisfaction (id,name,value) values (-2,'Denied',-100);
 insert into artifact_section (id,name) values (-1,'none');
 insert into artifact_section (id,name) values (0,'activities');
 insert into artifact_section (id,name) values (1,'attitudes');
@@ -4362,4 +4424,5 @@ insert into relationship_type (id,name) values(2,'conflict');
 insert into relationship_type (id,name) values(3,'part-of');
 insert into code_type (id,name) values (0,'event');
 insert into code_type (id,name) values (1,'context');
-insert into privilege (id,name,description,value,rationale) values (0,'None','No privileges',0,'Default');
+insert into access_right (id,name,description,value,rationale) values (0,'None','No access rights',1,'Default');
+insert into privilege (id,name,description,value,rationale) values (0,'None','No privileges',10,'Default');

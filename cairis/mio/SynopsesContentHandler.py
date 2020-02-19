@@ -19,6 +19,7 @@
 from xml.sax.handler import ContentHandler,EntityResolver
 from cairis.core.ReferenceSynopsis import ReferenceSynopsis
 from cairis.core.ReferenceContribution import ReferenceContribution
+from cairis.core.TaskContribution import TaskContribution
 from cairis.core.Borg import Borg
 
 __author__ = 'Shamal Faily'
@@ -33,6 +34,8 @@ class SynopsesContentHandler(ContentHandler,EntityResolver):
     self.theStepSynopses = []
     self.theReferenceContributions = []
     self.theUseCaseContributions = []
+    self.theTaskContributions = []
+    self.resetSynopsisAttributes()
 
   def resolveEntity(self,publicId,systemId):
     return systemId
@@ -52,22 +55,43 @@ class SynopsesContentHandler(ContentHandler,EntityResolver):
   def useCaseContributions(self):
     return self.theUseCaseContributions
 
+  def taskContributions(self):
+    return self.theTaskContributions
+
+  def resetSynopsisAttributes(self):
+    self.theCharacteristic = ''
+    self.theReference = ''
+    self.theSynopsis = ''
+    self.theDimensionName = ''
+    self.theActorType = ''
+    self.theActor = ''
+    self.theInitialSatisfaction = 'None'
+    self.theSystemGoals = []
+
   def startElement(self,name,attrs):
     self.currentElementName = name
     if name == 'characteristic_synopsis':
-      cName = attrs['characteristic']
-      synName = attrs['synopsis']
-      dimName = attrs['dimension']
-      aType = attrs['actor_type']
-      aName = attrs['actor']
-      self.theCharacteristicSynopses.append(ReferenceSynopsis(-1,cName,synName,dimName,aType,aName))
+      self.theCharacteristic = attrs['characteristic']
+      self.theSynopsis = attrs['synopsis']
+      self.theDimensionName = attrs['dimension']
+      self.theActorType = attrs['actor_type']
+      self.theActor = attrs['actor']
+      try:
+        self.theInitialSatisfaction = attrs['satisfaction']
+      except KeyError:
+        pass 
     elif name == 'reference_synopsis':
-      refName = attrs['reference']
-      synName = attrs['synopsis']
-      dimName = attrs['dimension']
-      aType = attrs['actor_type']
-      aName = attrs['actor']
-      self.theReferenceSynopses.append(ReferenceSynopsis(-1,refName,synName,dimName,aType,aName))
+      self.theReference = attrs['reference']
+      self.theSynopsis = attrs['synopsis']
+      self.theDimensionName = attrs['dimension']
+      self.theActorType = attrs['actor_type']
+      self.theActor = attrs['actor']
+      try:
+        self.theInitialSatisfaction = attrs['satisfaction']
+      except KeyError:
+        pass 
+    elif name == 'system_goal':
+      self.theSystemGoals.append(attrs['name'])
     elif name == 'step_synopsis':
       ucName = attrs['usecase']
       envName = attrs['environment']
@@ -88,3 +112,17 @@ class SynopsesContentHandler(ContentHandler,EntityResolver):
       me = attrs['means_end']
       cont = attrs['contribution']
       self.theUseCaseContributions.append(ReferenceContribution(ucName,refName,me,cont))
+    elif name == 'task_contribution':
+      taskName = attrs['task']
+      envName = attrs['environment']
+      refName = attrs['referent']
+      cont = attrs['contribution']
+      self.theTaskContributions.append(TaskContribution(taskName,refName,envName,cont))
+
+  def endElement(self,name):
+    if name == 'characteristic_synopsis':
+      self.theCharacteristicSynopses.append(ReferenceSynopsis(-1,self.theCharacteristic,self.theSynopsis,self.theDimensionName,self.theActorType,self.theActor,'persona_characteristic',self.theInitialSatisfaction,self.theSystemGoals))
+      self.resetSynopsisAttributes()
+    elif name == 'reference_synopsis':
+      self.theReferenceSynopses.append(ReferenceSynopsis(-1,self.theReference,self.theSynopsis,self.theDimensionName,self.theActorType,self.theActor,'document_reference',self.theInitialSatisfaction,self.theSystemGoals))
+      self.resetSynopsisAttributes()

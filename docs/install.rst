@@ -23,6 +23,16 @@ For the smaller install (without pdf export functionality) download and run the 
    sudo docker run --name cairis-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d mysql:5.7 --thread_stack=256K
    sudo docker run --name CAIRIS --link cairis-mysql:mysql -d -P -p 80:8000 --net=bridge shamalfaily/cairis
 
+If you run the above commands on macOS (and possibly other non-Linux platformns), you might get the error *links are only supported for user-defined networks*.  If so, you should instead run the below commands to download and run your containers:
+
+.. code-block:: bash
+   
+   NET=cairisnet
+   docker network create -d bridge $NET
+   docker run --name cairis-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d mysql:5.7 --thread_stack=256K
+   docker network connect $NET cairis-mysql
+   docker run --name CAIRIS -d -P -p 80:8000 --net=$NET shamalfaily/cairis
+
 The *docker run* commands will create and start-up CAIRIS, but you will need to create an account before you can use it.  To do this, run the below command - replacing test and test with your desired username and password. 
 
 .. code-block:: bash
@@ -57,13 +67,13 @@ Please feel free to use this container to evaluate CAIRIS, but do not use it for
 Ubuntu CAIRIS Virtual Machine
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you have VMWare then you can download an Ubuntu CAIRIS virtual machine from `here <https://drive.google.com/open?id=1DT6B_3DaoZ1a8XAI8QAhigq8LPu7lrOJ>`_ .  This is Ubuntu VM was created using the quickInstall.sh script described in the section below.  To login to the VM, the username/password is cairisuser/cairisuser.  The account contains a short-cut to Chromium, which has the Persona Helper chrome extension installed.
+If you have VMWare then you can download an Ubuntu CAIRIS virtual machine from `here <https://drive.google.com/open?id=1DT6B_3DaoZ1a8XAI8QAhigq8LPu7lrOJ>`_ .  This VM was created using the quickInstall.sh script described in the section below.  To login to the VM, the username/password is cairisuser/cairisuser.  The account contains a short-cut to Chromium, which has the Persona Helper chrome extension installed.
 
 
 Installation and configuration via GitHub (automated)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you have a clean Ubuntu VM, you can quickly install and configure CAIRIS and its dependencies with the command below, replacing my-secret-pw with your desired root password for MySQL.
+If you have a clean Ubuntu 19.10 VM, you can quickly install and configure CAIRIS and its dependencies with the command below, replacing my-secret-pw with your desired root password for MySQL.
 
 .. code-block:: bash
 
@@ -81,10 +91,32 @@ This script also adds an alias so, in future, you can update CAIRIS by running t
 
    update_cairis
 
+Installation and configuration of server with account registration via GitHub (automated)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you have a clean Ubuntu 19.10 VM, want to quickly install CAIRIS for multiple users, but don't want to use the defaults associated with the quickInstall.sh script, then you can run the more bespoke serverInstall.sh script as below, replacing (i) my-secret-pw with your desired MySQL root password, (ii) mymailserver.com with the name of your private (with SSL) outgoing mail server, (iii) 465 with this mail server's port, (iv) admin@mymailserver.com with your mail server username, and (v) mypassword with this account's password.
+
+.. code-block:: bash
+
+   sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y && sudo apt install curl -y && sudo apt install net-tools -y && curl -s https://cairis.org/serverInstall.sh | bash -s my-secret-pw mymailserver.com 465 admin@mymailserver.com mypassword
+
+When working with very large models, you may get memory errors when viewing goal models or carrying out model validation checks.  If you do, you could consider increasing the thread_stack size in /etc/mysql/conf.d/mysql.cnf.  For example, increasing the size to 1024K made it possible to valid even really big system-of-system models, but you can increase or decrease this size based on your server's performance and the number of users you expect the server to support.
+
+If you follow these instructions then, once you've restarted your server, CAIRIS should be accessible via http://SERVER:8000, where SERVER is the name or IP address of your machine.  If you wish to route your http traffic accordingly (e.g. via DNS) then the CAIRIS service supports acccess via https too.  This is the approach currently taken by the CAIRIS live demo on https://demo.cairis.org.
+
+Although no update_cairis alias is created, we provide a `rebuildServer.sh <https://cairis.org/rebuildServer.sh>`_ script which, if run from cron each night, will rebuild and reconfigure CAIRIS while still retaining the user accounts created on the server.  This script takes the same command line arguments as the serverInstall.sh script, with the addition of additional arguments for the name of the account running CAIRIS, and the accounts home directly.  For example, if the account running CAIRIS is *sfaily* and the home directory in */home/sfaily* then, to rebuild the server at 0200 each morning you should run *sudo crontab -e* and add the following line to your crontab::
+
+
+   0 2 * * * /home/sfaily/rebuildServer.sh my-secret-pw mymailserver.com 465 admin@mymailserver.com mypassword sfaily /home/sfaily > /home/sfaily/rebuild.log 2>&1
+
+This rebuild.log file should be useful for troubleshooting any problems with the rebuild.
+
+Once the server is running, users can register for accounts using the Register link on the login page.  The account name should be a valid email address.  When an account is created, an email is sent to the user and the user is logged in.  If the Reset link is clicked and the acccount name is provided, CAIRIS will email instructions for resetting the password to the user.
+
 Installation and configuration via GitHub (manual)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you're happy to use the command line, you may like to install CAIRIS from the latest source code in GitHub.  CAIRIS can be installed on any platform that its open-source dependencies are available for.  The most tested platforms are `Ubuntu <http://www.ubuntu.com>`_ or `Debian <https://www.debian.org>`_ .  Assuming you are using some flavour of Linux, just follow the steps below:
+If you're happy to use the command line, you may like to install CAIRIS from the latest source code in GitHub.  CAIRIS can be installed on any platform that its open-source dependencies are available for.  The most tested platform is `Ubuntu <http://www.ubuntu.com>`_ .  Assuming you are using Ubuntu, just follow the steps below:
 
 Begin by installing the required applications and dependencies:
 
@@ -92,7 +124,15 @@ Begin by installing the required applications and dependencies:
 
    sudo apt-get install python3-dev build-essential mysql-server mysql-client graphviz docbook dblatex python3-pip python3-mysqldb python3-numpy git libmysqlclient-dev --no-install-recommends texlive-latex-extra docbook-utils inkscape libxml2-dev libxslt1-dev poppler-utils python3-setuptools pandoc
 
-If you are installing Ubuntu 18.04 LTS or later, or have not been prompted to set a root database password, you will need to set this manually.  You can find instructions on how to do that `here <https://linuxconfig.org/how-to-reset-root-mysql-password-on-ubuntu-18-04-bionic-beaver-linux>`_.
+If you are installing Ubuntu 18.04 LTS or later, or have not been prompted to set a root database password, you will need to set this manually.  This entails starting mysqld with the --skip-grant-tables option, logging into mysql as root, and setting the root password by hand.  You can find instructions on how to do that `here <https://linuxconfig.org/how-to-reset-root-mysql-password-on-ubuntu-18-04-bionic-beaver-linux>`_.
+
+In addition to the above, you also need to update my MySQL server system variables. You can do this by adding or updating the below values to your mysqld.cnf file. In Ubuntu 19.04, you can find this in /etc/mysql/mysql.conf.d, but the file location might differ depending on your OS and MySQL version:
+
+.. code-block:: bash
+
+   thread_stack = 256K
+   max_sp_recursion_depth = 255
+   log_bin_trust_function_creators = 1
 
 Clone the latest version of the CAIRIS github repository, and use pip to install the dependencies in the root directory, i.e.
 
