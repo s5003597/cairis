@@ -38,6 +38,7 @@ from cairis.tools.JsonConverter import json_serialize
 from cairis.tools.MessageDefinitions import CImportMessage
 from cairis.tools.ModelDefinitions import CImportParams
 from cairis.tools.SessionValidator import validate_proxy, check_required_keys, get_session_id
+from cairis.tools.STIXImport import stix_to_iris
 import codecs
 
 __author__ = 'Robin Quetin, Shamal Faily'
@@ -115,6 +116,19 @@ class CImportTextAPI(Resource):
       resp = make_response(json_serialize(resp_dict, session_id=session_id), OK)
       resp.headers['Content-Type'] = 'application/json'
       return resp
+    elif type == 'Risk Analysis (STIX)':
+      file_contents = stix_to_iris(file_contents)
+      file_contents = unquote(file_contents)
+      file_contents = file_contents.replace("\u2018", "'").replace("\u2019", "'")
+
+      try:
+        dao = ImportDAO(session_id)
+        result = dao.file_import(abs_path, type, overwrite)
+        dao.close()
+      except DatabaseProxyException as ex:
+        raise ARMHTTPError(ex)
+      except ARMException as ex:
+        raise ARMHTTPError(ex)
     elif type == 'Attack Tree (Dot)':
       try:
         environment_name = cimport_params['environment']
