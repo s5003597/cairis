@@ -3,16 +3,31 @@ from stix2 import MemoryStore, Filter
 from stix2 import parse
 
 from xml.etree.ElementTree import Element, SubElement, ElementTree
-from xml.etree.ElementTree import tostring
+import xml.etree.ElementTree as ET
+
+from xml.dom import minidom
 
 import requests
+
+s = """<?xml version="1.0"?>
+<!DOCTYPE cairis_model PUBLIC "-//CAIRIS//DTD MODEL 1.0//EN" "http://cairis.org/dtd/cairis_model.dtd">"""
 
 def stix_to_iris(inputFile):
     # Parses to SIX Objects and Stores in Memory
     mem = MemoryStore(parse(inputFile, allow_custom=True))
 
-    # Starts XML Document
-    risk_analysis = Element('riskanalysis')
+    cairis_model = Element('cairis_model')
+
+    build_tvtypes(cairis_model)
+
+    cairis = SubElement(cairis_model, 'cairis')
+    env = SubElement(cairis, 'environment')
+    env.set('name', 'Default')
+    env.set('short_code', 'DEF')
+    defin = SubElement(env, 'definition')
+    defin.text = 'Default environment'
+
+    risk_analysis = SubElement(cairis_model, 'riskanalysis')
 
     # Builds IRIS XML from STIX Objects
     build_attacker(mem, risk_analysis)
@@ -20,8 +35,9 @@ def stix_to_iris(inputFile):
     vuln_rels = build_vuln(mem, risk_analysis)
     build_risk(mem, risk_analysis, vuln_rels)
 
-    # Returns as string (file_contents)
-    return tostring(risk_analysis)
+    file_contents = ET.tostring(cairis_model)
+
+    return s + file_contents.decode('utf-8')
 
 def build_attacker(mem, risk_analysis):
     available = False
@@ -29,17 +45,12 @@ def build_attacker(mem, risk_analysis):
         xml = SubElement(risk_analysis, 'attacker')
 
         name = threat_actor["name"]
-        # If Identity of threat actor is known, there will be an SRO.
-        # E.G Threat Actor SuperHard real name is Mei Qiang
-        for sdo in mem.related_to(threat_actor):
-            if sdo["type"] == "identity":
-                name = sdo["name"]
 
         xml.set('name', name)
         xml.set('image', '')
 
         threat_actor_keys = threat_actor.keys()
-        
+
         if "labels" in threat_actor_keys:
             for label in threat_actor["labels"]:
                 tag = SubElement(xml, "tag")
@@ -48,7 +59,10 @@ def build_attacker(mem, risk_analysis):
         if 'description' in threat_actor_keys:
             desc = SubElement(xml, 'description')
             desc.text = threat_actor['description']
-        
+        else:
+            desc = SubElement(xml, 'description')
+            desc.text = 'N/A'
+
         env = SubElement(xml, 'attacker_environment')
         env.set('name', 'Default')
 
@@ -65,8 +79,6 @@ def build_attacker(mem, risk_analysis):
                 # Assigns Attacker the Role
                 attacker_role = SubElement(env, 'attacker_role')
                 attacker_role.set('name', role)
-        
-
         motivations = []
         # Primary Motivations returns a string
         if 'primary_motivation' in threat_actor_keys:
@@ -77,7 +89,7 @@ def build_attacker(mem, risk_analysis):
         for motiv in motivation_format(motivations):
             motivation = SubElement(env, 'motivation')
             motivation.set('name', motiv)
-        
+
         capabilities = []
         if 'resource_level' in threat_actor_keys:
             # Resources/Equipment, Resources/Facilities, Resources/Funding
@@ -100,7 +112,7 @@ def build_attacker(mem, risk_analysis):
                     ('Resources/Facilities', 'High'),
                     ('Resources/Funding', 'High'),
                 ])
-        
+
         if 'sophitication' in threat_actor_keys:
             # Knowledge/Books and Manuals, Education and Training
             # Software, Technology
@@ -130,19 +142,19 @@ def build_attacker(mem, risk_analysis):
                     ('Software', 'High'),
                     ('Technology', 'High')
                 ])
-        
+
         for capability in capabilities:
             cap = SubElement(env, 'capability')
             cap.set('name', capability[0])
             cap.set('value', capability[1])
         available = True
-    
+
     if not available:
         # Not all risks have known threat actors, when a threat is carried out without known
         # threat actors, they are linked to campaigns. E.g poisonivy.json
         # Campaign represents a group of unknown threat actors
         build_from_campaign(mem, risk_analysis)
-        
+
 def build_from_campaign(mem, risk_analysis):
     # Campaign has limited property values, since it represents a group of
     # threat actors, a default campaign role will be set.
@@ -159,11 +171,11 @@ def build_from_campaign(mem, risk_analysis):
             for alias in campaign['aliases']:
                 tag = SubElement(xml, "tag")
                 tag.set("name", alias)
-        
+
         if "description" in campaign.keys():
             desc = SubElement(xml, "description")
             desc.text = campaign["description"]
-        
+
         env = SubElement(xml, "attacker_environment")
         env.set("name", "Default")
         role = SubElement(env, "attacker_role")
@@ -193,7 +205,7 @@ def build_threat(mem, risk_analysis):
 
             # Use desc to certain detect threat type
             desc = threat["description"].lower()
-        
+
         # Sets type of threat based on type or description
         if threat['type'] == 'malware':
             xml.set("type", "Electronic/Malware")
@@ -205,14 +217,14 @@ def build_threat(mem, risk_analysis):
             xml.set("type", "Insider/Sabotage")
         else:
             xml.set("type", "Electronic/Hacking")
-        
+
         # Sets Labels/Tags if Present
         # Not a requirement
         if 'labels' in threat_keys:
             for label in threat['labels']:
                 tag = SubElement(xml, "tag")
                 tag.set("name", label)
-        
+
         env = SubElement(xml, "threat_environment")
         env.set("name", "Default")
         #likelihood = input("Likelihood: ")
@@ -236,24 +248,24 @@ def build_vuln(mem, risk_analysis):
         xml = SubElement(risk_analysis, "vulnerability")
         xml.set("name", vuln["name"])
 
-        vuln_keys = vuln_keys()
+        vuln_keys = vuln.keys()
 
         if "description" in vuln_keys:
             desc = SubElement(xml, "description")
             desc.text = vuln["description"]
 
-        
+
         if "external_references" in vuln_keys:
             cve = ""
             # Applies CVE IDs to IRIS Tags
             for ext_ref in vuln["external_references"]:
                 tag = SubElement(xml, "tag")
                 tag.set("name", ext_ref["external_id"])
-                
+
                 if not cve:
                     if ext_ref["source_name"] == "cve":
                         cve = ext_ref["external_id"]
-            
+
             # Builds IRIS vulnerability based on CVE Info
             build_from_cve(cve, xml)
         else:
@@ -262,7 +274,7 @@ def build_vuln(mem, risk_analysis):
             # 1. Type
             # 2. Severity
             # 3. Asset
-        
+
         # Checks for any vulnerabilities that have SROs with threats
         # Used when building risks
         for sdo in mem.related_to(vuln):
@@ -330,12 +342,9 @@ def build_from_cve(cve, xml):
 
 def build_risk(mem, risk_analysis, vuln_rels):
     # Builds risk from known threats and vuln with SROs
-    count = 0
     for vuln, threat in vuln_rels:
-        count += 1
         xml = SubElement(risk_analysis, "risk")
-        # input() risk name
-        xml.set("name", "Risk" + str(count))
+        xml.set("name", input("Risk Name: "))
         xml.set("vulnerability", vuln["name"])
         xml.set("threat", threat["name"])
 
@@ -343,7 +352,40 @@ def build_risk(mem, risk_analysis, vuln_rels):
         env.set("environment", "Default")
         narrative = SubElement(env, "narrative")
         narrative.text = "Uses " + threat["name"] + " to exploit " + vuln["name"] + "."
-             
+
+def build_tvtypes(xml):
+    vuln_type = {
+        "Configuration": "A vulnerability resulting from an error in the configuration and administration of a system or component.",
+        "Design": "A vulnerability inherent in the design or specification of hardware or software whereby even a perfect implementation will result in a vulnerability.",
+        "Implementation": "A vulnerability resulting from an error made in implementing software or hardware of a satisfactory design.",
+    }
+    threat_type = {
+        "Electronic/DoS and DDoS": "A Denial-of-Service (DoS) attack involves a malicious attempt to disrupt the operation of a computer system or network that is connected to the Internet.  A Distributed Denial-of-Service (DDoS) attack is a more dangerous evolution of a DoS attack because it utilises a network of compromised zombie computers to mount the attack, so there is no identifiable single source.",
+        "Electronic/Hacking": "Hackers want to get into your computer system and use them for their own purposes.  There are many hacking tools available on the internet as well as online communities actively discussing hacking techniques enabling even unskilled hackers to break into unprotected systems.  Hackers have a range of motives; from showing off their technical prowess, to theft of money, credentials or information, to cause damage.",
+        "Electronic/Keystoke logging": "Keystroke loggers work by recording the sequence of key-strokes that a user types in.  The more sophisticated versions use filtering mechanisms to only record highly prized information such as email addresses, passwords and credit card number sequences.",
+        "Electronic/Malware": "Malware is any program or file that is harmful to a computer, the term covers viruses, worms, Trojan horses, and spyware.  Malware is becoming increasingly sophisticated and can be used to compromise computers to install DOS zombie programs or other malicious programs.",
+        "Electronic/Phishing and Spoofing": "Phishing describes a social engineering process designed to trick an organisation's customers into imparting confidential information such as passwords, personal data or banking and financial details.  Most commonly these are criminal attacks but the same techniques could be used by others to get sensitive information.",
+        "Insider/Manipulation": "Sometimes deliberate attempts are made to acquire information or access by manipulating staff by using a range of influencing techniques.  This is sometimes described as social engineering, creating situations in which someone will willingly provide access to information, sites or systems to someone unauthorised to receive it.  Customer facing personnel who have been trained to be helpful and informative can be particularly vulnerable to such attacks.",
+        "Insider/Sabotage": "Saborage is often committed by a former employee seeking revenge on their employer because of a personal grudge caused by a negative work related event such as dismissal.  Although it is sometimes planned well in advance, it can also be the result of an opportunistic moment.",
+        "Natural": "Environment / Acts of Nature",
+        "Physical": "Physical Security"
+    }
+    tvtypes = SubElement(xml, 'tvtypes')
+    for key in vuln_type.keys():
+        vulntype = SubElement(tvtypes, 'vulnerability_type')
+        vulntype.set("name", key)
+        desc = SubElement(vulntype, 'description')
+        desc.text = vuln_type[key]
+
+    for key in threat_type.keys():
+        threattype = SubElement(tvtypes, 'threat_type')
+        threattype.set("name", key)
+        desc = SubElement(threattype, 'description')
+        desc.text = threat_type[key]
+
+def build_domain_values(xml):
+    threat_values = []
+
 def containsNumber(inputString):
     # Checks if a number is in a string
     return any(char.isdigit() for char in inputString)

@@ -91,6 +91,12 @@ class CImportTextAPI(Resource):
     overwrite = cimport_params['overwrite']
     type = cimport_params['type']
 
+    if type == 'Risk Analysis (STIX)':
+      file_contents = stix_to_iris(file_contents)
+      file_contents = unquote(file_contents)
+      file_contents = file_contents.replace("\u2018", "'").replace("\u2019", "'")
+      type = 'Risk Analysis'
+
     if file_contents.startswith('<?xml'):
       fd, abs_path = mkstemp(suffix='.xml')
       fs_temp = codecs.open(abs_path, 'w','utf-8')
@@ -116,19 +122,6 @@ class CImportTextAPI(Resource):
       resp = make_response(json_serialize(resp_dict, session_id=session_id), OK)
       resp.headers['Content-Type'] = 'application/json'
       return resp
-    elif type == 'Risk Analysis (STIX)':
-      file_contents = stix_to_iris(file_contents)
-      file_contents = unquote(file_contents)
-      file_contents = file_contents.replace("\u2018", "'").replace("\u2019", "'")
-
-      try:
-        dao = ImportDAO(session_id)
-        result = dao.file_import(abs_path, type, overwrite)
-        dao.close()
-      except DatabaseProxyException as ex:
-        raise ARMHTTPError(ex)
-      except ARMException as ex:
-        raise ARMHTTPError(ex)
     elif type == 'Attack Tree (Dot)':
       try:
         environment_name = cimport_params['environment']
