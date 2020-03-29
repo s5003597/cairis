@@ -2,24 +2,29 @@ from stix2 import CustomObject, properties
 from stix2 import MemoryStore, Filter
 from stix2 import parse
 
-from xml.etree.ElementTree import Element, SubElement, ElementTree
+from xml.etree.ElementTree import Element, SubElement
 import xml.etree.ElementTree as ET
-
-from xml.dom import minidom
 
 import requests
 
 s = """<?xml version="1.0"?>
 <!DOCTYPE cairis_model PUBLIC "-//CAIRIS//DTD MODEL 1.0//EN" "http://cairis.org/dtd/cairis_model.dtd">"""
 
+# TO DO:
+# Build User Input!, likelihood, vuln_type, risk name
+# Build asset function (for imports of customobjects)
+
 def stix_to_iris(inputFile):
     # Parses to SIX Objects and Stores in Memory
     mem = MemoryStore(parse(inputFile, allow_custom=True))
 
+    # Starts XML Building
     cairis_model = Element('cairis_model')
 
+    # CAIRIS Requirement
     build_tvtypes(cairis_model)
 
+    # Assumes the default environment
     cairis = SubElement(cairis_model, 'cairis')
     env = SubElement(cairis, 'environment')
     env.set('name', 'Default')
@@ -35,9 +40,9 @@ def stix_to_iris(inputFile):
     vuln_rels = build_vuln(mem, risk_analysis)
     build_risk(mem, risk_analysis, vuln_rels)
 
-    file_contents = ET.tostring(cairis_model)
+    print(s + ET.tostring(cairis_model).decode('utf-8'))
 
-    return s + file_contents.decode('utf-8')
+    return s + ET.tostring(cairis_model).decode('utf-8')
 
 def build_attacker(mem, risk_analysis):
     available = False
@@ -209,14 +214,16 @@ def build_threat(mem, risk_analysis):
         # Sets type of threat based on type or description
         if threat['type'] == 'malware':
             xml.set("type", "Electronic/Malware")
-        elif "phish" in desc or "spoof" in desc:
-            xml.set("type", "Electronic/Phishing and Spoofing")
-        elif "insider" in desc and "manipulat" in desc:
-            xml.set("type", "Insider/Manipulation")
-        elif "insider" in desc and ("sabotage" in desc or "revenge" in desc):
-            xml.set("type", "Insider/Sabotage")
+        elif threat['type'] == 'tool':
+            xml.set('type', 'Electronic/Tool')
+        elif 'phish' in desc or 'spoof' in desc:
+            xml.set('type', 'Electronic/Phishing and Spoofing')
+        elif 'manipulat' in desc:
+            xml.set('type', 'Insider/Manipulation')
+        elif 'sabotage' in desc or 'revenge' in desc:
+            xml.set('type', 'Insider/Sabotage')
         else:
-            xml.set("type", "Electronic/Hacking")
+            xml.set('type', 'Electronic/Hacking')
 
         # Sets Labels/Tags if Present
         # Not a requirement
@@ -342,11 +349,13 @@ def build_from_cve(cve, xml):
 
 def build_risk(mem, risk_analysis, vuln_rels):
     # Builds risk from known threats and vuln with SROs
+    count = 1
     for vuln, threat in vuln_rels:
         xml = SubElement(risk_analysis, "risk")
-        xml.set("name", input("Risk Name: "))
+        xml.set("name", "Risk " + count)
         xml.set("vulnerability", vuln["name"])
         xml.set("threat", threat["name"])
+        count += 1
 
         env = SubElement(xml, "misusecase")
         env.set("environment", "Default")
@@ -363,6 +372,7 @@ def build_tvtypes(xml):
         "Electronic/DoS and DDoS": "A Denial-of-Service (DoS) attack involves a malicious attempt to disrupt the operation of a computer system or network that is connected to the Internet.  A Distributed Denial-of-Service (DDoS) attack is a more dangerous evolution of a DoS attack because it utilises a network of compromised zombie computers to mount the attack, so there is no identifiable single source.",
         "Electronic/Hacking": "Hackers want to get into your computer system and use them for their own purposes.  There are many hacking tools available on the internet as well as online communities actively discussing hacking techniques enabling even unskilled hackers to break into unprotected systems.  Hackers have a range of motives; from showing off their technical prowess, to theft of money, credentials or information, to cause damage.",
         "Electronic/Keystoke logging": "Keystroke loggers work by recording the sequence of key-strokes that a user types in.  The more sophisticated versions use filtering mechanisms to only record highly prized information such as email addresses, passwords and credit card number sequences.",
+        "Electronic/Tool": "Tools are legitimate software that can be used by threat actors to perform attacks.",
         "Electronic/Malware": "Malware is any program or file that is harmful to a computer, the term covers viruses, worms, Trojan horses, and spyware.  Malware is becoming increasingly sophisticated and can be used to compromise computers to install DOS zombie programs or other malicious programs.",
         "Electronic/Phishing and Spoofing": "Phishing describes a social engineering process designed to trick an organisation's customers into imparting confidential information such as passwords, personal data or banking and financial details.  Most commonly these are criminal attacks but the same techniques could be used by others to get sensitive information.",
         "Insider/Manipulation": "Sometimes deliberate attempts are made to acquire information or access by manipulating staff by using a range of influencing techniques.  This is sometimes described as social engineering, creating situations in which someone will willingly provide access to information, sites or systems to someone unauthorised to receive it.  Customer facing personnel who have been trained to be helpful and informative can be particularly vulnerable to such attacks.",
@@ -382,9 +392,6 @@ def build_tvtypes(xml):
         threattype.set("name", key)
         desc = SubElement(threattype, 'description')
         desc.text = threat_type[key]
-
-def build_domain_values(xml):
-    threat_values = []
 
 def containsNumber(inputString):
     # Checks if a number is in a string

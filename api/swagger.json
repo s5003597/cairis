@@ -3890,6 +3890,50 @@
         }
       }
     },
+    "/api/export/stix" : {
+      "get" : {
+        "summary" : "Export Risk Analysis STIX model",
+        "description" : "Export Risk Analysis STIX model file.  Named model.json",
+        "operationId" : "exportModel",
+        "security" : [ {
+          "cairisAuth" : [ ]
+        } ],
+        "tags" : [ "export" ],
+        "responses" : {
+          "200" : {
+            "description" : "STIX model file",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Export error",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UnexpectedMessage"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Unknown error",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UnexpectedMessage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/export/file/architectural_pattern/{name}" : {
       "get" : {
         "summary" : "Export architectural pattern",
