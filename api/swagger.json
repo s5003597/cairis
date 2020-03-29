@@ -3890,7 +3890,7 @@
         }
       }
     },
-    "/api/export/stix" : {
+    "/api/export/file/stix" : {
       "get" : {
         "summary" : "Export Risk Analysis STIX model",
         "description" : "Export Risk Analysis STIX model file.  Named model.json",
