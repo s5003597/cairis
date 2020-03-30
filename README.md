@@ -15,7 +15,7 @@
 
 CAIRIS (Computer Aided Integration of Requirements and Information Security) is a platform for specifying and modelling secure and usable systems. CAIRIS was built from the ground-up to support the elements necessary for usability, requirements, and risk analysis. 
 
-You can quick install this fork with the command below:
+You can quick install this fork with the command below:\
 sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get dist-upgrade -y && sudo apt install curl -y && sudo apt install net-tools -y && curl -s https://raw.githubusercontent.com/s5003597/cairis/stixconversion/quickInstall.sh | bash -s my-secret-pw
 
 See [the CAIRIS website](https://cairis.org) for more information on the platform, and details on how to get started. 
