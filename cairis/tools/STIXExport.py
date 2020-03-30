@@ -36,7 +36,7 @@ def iris_to_stix(inputFile):
 
     build_assets(handler.assets(), mem)
     build_vulns(handler.vulnerabilities(), mem)
-    build_threatactors(handler.attackers(), mem)
+    build_threatactors(handler.attackers(), handler.roles(), mem)
     build_threats(handler.threats(), mem)
     build_risks(handler.risks(), mem)
     
@@ -95,7 +95,7 @@ def build_vulns(vulns, mem):
                             source_ref=stix_vuln,
                             target_ref=sdo ))
 
-def build_threatactors(attackers, mem):
+def build_threatactors(attackers, risk_roles, mem):
     for attacker in attackers:
         labels, motives, roles, capabilities = [], [], [], []
         for envprop in attacker.environmentProperties():
@@ -104,8 +104,11 @@ def build_threatactors(attackers, mem):
             # Infer labels from motivations
             labels = infer_threat_labels(motives) + attacker.tags()
             # Gets list of role names
-            roles = envprop.roles()
-
+            attacker_roles = envprop.roles()
+            roles = []
+            for role in risk_roles:
+                if role.name() in attacker_roles:
+                    roles.append(role.name() + '-' + role.type())
             # Gets Capabilities
             resource_count, soph_count = 0, 0
             for (name, value) in envprop.capabilities():

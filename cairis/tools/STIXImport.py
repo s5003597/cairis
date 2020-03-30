@@ -1,4 +1,4 @@
-from stix2 import CustomObject, properties
+from .STIXExport import Asset
 from stix2 import MemoryStore, Filter
 from stix2 import parse
 
@@ -35,6 +35,41 @@ def stix_to_iris(inputFile):
 
     return s + ET.tostring(cairis_model).decode('utf-8')
 
+def build_assets(mem, risk_analysis):
+    for asset in mem.query([Filter("type","=", "x-asset")]):
+        xml = SubElement(risk_analysis, 'asset')
+        xml.set('name', asset['name'])
+        xml.set('short_code', short_code_gen([asset['name']]))
+        xml.set('type', asset['asset_type'])
+        xml.set('is_critical', '0')
+
+        desc = SubElement(xml, 'description')
+        desc.text = asset['description']
+
+        sign = SubElement(xml, 'significance')
+        sign.text = asset['significance']
+
+        _ = SubElement(xml, 'critical_rationale')
+
+        for prop in asset['impact'].keys():
+            value = None
+            if asset['impact'][prop][0] == 0:
+                continue
+            elif asset['impact'][prop][0] == 1:
+                value = 'Low'
+            elif asset['impact'][prop][0] == 2:
+                value = 'Medium'
+            elif asset['impact'][prop][0] == 3:
+                value = 'High'
+
+            sec_prop = SubElement(xml, 'security_property')
+            sec_prop.set('environment', 'Default')
+            sec_prop.set('property', prop)
+            sec_prop.set('value', value)
+
+            rationale = SubElement(sec_prop, 'rationale')
+            rationale.text = asset['impact'][prop][1]
+
 def build_attacker(mem, risk_analysis):
     available = False
     for threat_actor in mem.query([Filter("type","=", "threat-actor")]):
@@ -66,8 +101,13 @@ def build_attacker(mem, risk_analysis):
             for role in threat_actor['roles']:
                 # Creates IRIS Role
                 xml = SubElement(risk_analysis, 'role')
-                xml.set('name', role)
-                xml.set('type', 'Attacker')
+                role_attrib = role.split('-')
+                if len(role_attrib) > 1:
+                    xml.set('name', role_attrib[0])
+                    xml.set('type', role_attrib[1])
+                else:
+                    xml.set('name', role_attrib[0])
+                    xml.set('type', 'Attacker')
                 xml.set('short_code', short_code_gen(role.split('-')))
                 #desc = SubElement(xml, 'description')
                 #desc.text = 'None'
@@ -75,13 +115,13 @@ def build_attacker(mem, risk_analysis):
                 # Assigns Attacker the Role
                 attacker_role = SubElement(env, 'attacker_role')
                 attacker_role.set('name', role)
-        motivations = []
+        motivations = None
         # Primary Motivations returns a string
         if 'primary_motivation' in threat_actor_keys:
-            motivations.append(threat_actor['primary_motivation'])
+            motivations = [threat_actor['primary_motivation']]
         # Secondary motivations returns a list of strings
         if 'secondary_motivations' in threat_actor_keys:
-            motivations.append(threat_actor['secondary_motivations'])
+            motivations.extend(threat_actor['secondary_motivations'])
         for motiv in motivation_format(motivations):
             motivation = SubElement(env, 'motivation')
             motivation.set('name', motiv)
