@@ -10,21 +10,14 @@ import requests
 s = """<?xml version="1.0"?>
 <!DOCTYPE cairis_model PUBLIC "-//CAIRIS//DTD MODEL 1.0//EN" "http://cairis.org/dtd/cairis_model.dtd">"""
 
-# TO DO:
-# Build User Input!, likelihood, vuln_type, risk name
-# Build asset function (for imports of customobjects)
-
 def stix_to_iris(inputFile):
     # Parses to SIX Objects and Stores in Memory
     mem = MemoryStore(parse(inputFile, allow_custom=True))
 
-    # Starts XML Building
     cairis_model = Element('cairis_model')
 
-    # CAIRIS Requirement
     build_tvtypes(cairis_model)
 
-    # Assumes the default environment
     cairis = SubElement(cairis_model, 'cairis')
     env = SubElement(cairis, 'environment')
     env.set('name', 'Default')
@@ -39,8 +32,6 @@ def stix_to_iris(inputFile):
     build_threat(mem, risk_analysis)
     vuln_rels = build_vuln(mem, risk_analysis)
     build_risk(mem, risk_analysis, vuln_rels)
-
-    print(s + ET.tostring(cairis_model).decode('utf-8'))
 
     return s + ET.tostring(cairis_model).decode('utf-8')
 

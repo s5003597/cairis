@@ -20,7 +20,7 @@ from cairis.daemon.CairisHTTPError import CairisHTTPError, ARMHTTPError
 from cairis.data.CairisDAO import CairisDAO
 from cairis.core.Borg import Borg
 from cairis.mio.ModelExport import extractModel,extractPackage
-
+from cairis.tools.STIXExport import iris_to_stix
 __author__ = 'Shamal Faily'
 
 
@@ -56,6 +56,15 @@ class ExportDAO(CairisDAO):
   def grl_export(self,taskName,personaName,envName):
     try:
       return self.db_proxy.pcToGrl(personaName,taskName,envName);
+    except DatabaseProxyException as ex:
+      self.close()
+      raise ARMHTTPError(ex)
+
+  def stix_export(self,fileType='json'):
+    try:
+      if (fileType == 'json'):
+        xml_file = extractModel(self.session_id)
+        return iris_to_stix(xml_file)
     except DatabaseProxyException as ex:
       self.close()
       raise ARMHTTPError(ex)

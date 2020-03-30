@@ -361,6 +361,7 @@ api.add_resource(CExportController.CExportFileAPI, '/api/export/file',endpoint='
 api.add_resource(CExportController.CExportArchitecturalPatternAPI, '/api/export/file/architectural_pattern/<path:architectural_pattern_name>',endpoint='exportarchitecturalpattern')
 api.add_resource(CExportController.CExportSecurityPatternsAPI, '/api/export/file/security_patterns',endpoint='exportsecuritypatterns')
 api.add_resource(CExportController.CExportGRLAPI, '/api/export/file/grl/task/<path:task_name>/persona/<path:persona_name>/environment/<path:environment_name>',endpoint='exportgrl')
+api.add_resource(CExportController.CExportSTIXAPI, '/api/export/file/stix',endpoint='exportstix')
 
 # Find route
 api.add_resource(FindController.FindAPI, '/api/find/<path:search_string>',endpoint='find')

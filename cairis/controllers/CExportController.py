@@ -95,3 +95,19 @@ class CExportSecurityPatternsAPI(Resource):
     resp.headers["Content-Type"] = 'application/xml'
     resp.headers["Content-Disposition"] = 'Attachment; filename=' + fileName
     return resp
+
+class CExportSTIXAPI(Resource):
+
+  def get(self):
+    session_id = get_session_id(session, request)
+    fileName = request.args.get('filename', 'model')
+    fileType = request.args.get('fileType', 'json')
+
+    dao = ExportDAO(session_id)
+    modelBuf = dao.stix_export(fileType)
+    dao.close()
+
+    resp = make_response(modelBuf)
+    resp.headers["Content-Type"] = 'application/json'
+    resp.headers["Content-Disposition"] = 'Attachment; filename=' + fileName + '.' + fileType
+    return resp
