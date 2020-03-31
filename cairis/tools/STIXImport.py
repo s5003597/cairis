@@ -28,6 +28,7 @@ def stix_to_iris(inputFile):
     risk_analysis = SubElement(cairis_model, 'riskanalysis')
 
     # Builds IRIS XML from STIX Objects
+    build_assets(mem, risk_analysis)
     build_attacker(mem, risk_analysis)
     build_threat(mem, risk_analysis)
     vuln_rels = build_vuln(mem, risk_analysis)
@@ -101,20 +102,25 @@ def build_attacker(mem, risk_analysis):
             for role in threat_actor['roles']:
                 # Creates IRIS Role
                 xml = SubElement(risk_analysis, 'role')
-                role_attrib = role.split('-')
-                if len(role_attrib) > 1:
-                    xml.set('name', role_attrib[0])
-                    xml.set('type', role_attrib[1])
+                role_attrib = role.rsplit('-', 1)
+                rtypes = ['Attacker', 'Stakeholder', 'Data Subject', 'Data Processor', 'Data Controller']
+                rattacker = None
+                if len(role_attrib) > 1 and role_attrib[-1] in rtypes:
+                    rattacker = role_attrib[0]
+                    xml.set('name', rattacker.replace('-', ' '))
+                    xml.set('type', role_attrib[-1])
+                    xml.set('short_code', short_code_gen(role_attrib[0].split('-')))
                 else:
-                    xml.set('name', role_attrib[0])
+                    rattacker = role
+                    xml.set('name', rattacker.replace('-', ' '))
                     xml.set('type', 'Attacker')
-                xml.set('short_code', short_code_gen(role.split('-')))
+                    xml.set('short_code', short_code_gen(role.split('-')))
                 #desc = SubElement(xml, 'description')
                 #desc.text = 'None'
 
                 # Assigns Attacker the Role
                 attacker_role = SubElement(env, 'attacker_role')
-                attacker_role.set('name', role)
+                attacker_role.set('name', rattacker.replace('-', ' '))
         motivations = None
         # Primary Motivations returns a string
         if 'primary_motivation' in threat_actor_keys:
@@ -275,8 +281,6 @@ def build_threat(mem, risk_analysis):
                 attacker = SubElement(env, "threat_attacker")
                 attacker.set("name", sdo["name"])
 
-
-    # No Threatened Assets
     # No Threatened Property
     # Importing into CAIRIS still successful
 
@@ -288,10 +292,12 @@ def build_vuln(mem, risk_analysis):
 
         vuln_keys = vuln.keys()
 
+        if 'x_type' in vuln_keys:
+            xml.set('type', vuln['x_type'])
+
         if "description" in vuln_keys:
             desc = SubElement(xml, "description")
             desc.text = vuln["description"]
-
 
         if "external_references" in vuln_keys:
             cve = ""
@@ -303,21 +309,29 @@ def build_vuln(mem, risk_analysis):
                 if not cve:
                     if ext_ref["source_name"] == "cve":
                         cve = ext_ref["external_id"]
-
-            # Builds IRIS vulnerability based on CVE Info
-            build_from_cve(cve, xml)
+        env = None
+        if 'x_severity' in vuln_keys:
+            env = SubElement(xml, 'vulnerability_environment')
+            env.set('name', 'Default')
+            env.set('severity', vuln['x_severity'])
         else:
-            print()
+            # Builds IRIS vulnerability based on CVE Info
+            env = build_from_cve(cve, xml)
+
+
             # Build from user input
-            # 1. Type
-            # 2. Severity
-            # 3. Asset
+            # 1. Type - Custom Done
+            # 2. Severity - Custom Don
 
         # Checks for any vulnerabilities that have SROs with threats
         # Used when building risks
         for sdo in mem.related_to(vuln):
             if sdo["type"] == "attack-pattern" or sdo["type"] == "malware" or sdo["type"] == "tool":
                 vuln_rels.append((vuln, sdo))
+            
+            if sdo['type'] == 'x-asset':
+                asset = SubElement(env, 'vulnerable_asset')
+                asset.set('name', sdo['name'])
     return vuln_rels
 
 def build_from_cve(cve, xml):
@@ -377,13 +391,14 @@ def build_from_cve(cve, xml):
                         asset += " " + product[x]
                         continue
                     asset += product[x]
+    return env
 
 def build_risk(mem, risk_analysis, vuln_rels):
     # Builds risk from known threats and vuln with SROs
     count = 1
     for vuln, threat in vuln_rels:
         xml = SubElement(risk_analysis, "risk")
-        xml.set("name", "Risk " + count)
+        xml.set("name", "Risk " + str(count))
         xml.set("vulnerability", vuln["name"])
         xml.set("threat", threat["name"])
         count += 1

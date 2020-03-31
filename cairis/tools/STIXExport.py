@@ -108,7 +108,7 @@ def build_threatactors(attackers, risk_roles, mem):
             roles = []
             for role in risk_roles:
                 if role.name() in attacker_roles:
-                    roles.append(role.name() + '-' + role.type())
+                    roles.append(role.name().replace(' ', '-') + '-' + role.type())
             # Gets Capabilities
             resource_count, soph_count = 0, 0
             for (name, value) in envprop.capabilities():
