@@ -32,7 +32,9 @@ def stix_to_iris(inputFile):
     build_attacker(mem, risk_analysis)
     build_threat(mem, risk_analysis)
     vuln_rels = build_vuln(mem, risk_analysis)
-    build_risk(mem, risk_analysis, vuln_rels)
+    associations = build_risk(mem, risk_analysis, vuln_rels)
+
+    #build_associations(cairis_model, associations)
 
     return s + ET.tostring(cairis_model).decode('utf-8')
 
@@ -91,9 +93,6 @@ def build_attacker(mem, risk_analysis):
         if 'description' in threat_actor_keys:
             desc = SubElement(xml, 'description')
             desc.text = threat_actor['description']
-        else:
-            desc = SubElement(xml, 'description')
-            desc.text = 'N/A'
 
         env = SubElement(xml, 'attacker_environment')
         env.set('name', 'Default')
@@ -115,8 +114,6 @@ def build_attacker(mem, risk_analysis):
                     xml.set('name', rattacker.replace('-', ' '))
                     xml.set('type', 'Attacker')
                     xml.set('short_code', short_code_gen(role.split('-')))
-                #desc = SubElement(xml, 'description')
-                #desc.text = 'None'
 
                 # Assigns Attacker the Role
                 attacker_role = SubElement(env, 'attacker_role')
@@ -200,11 +197,27 @@ def build_attacker(mem, risk_analysis):
 def build_from_campaign(mem, risk_analysis):
     # Campaign has limited property values, since it represents a group of
     # threat actors, a default campaign role will be set.
-    xml = SubElement(risk_analysis, "role")
-    xml.set("name", "Campaign")
-    xml.set("type", "Attacker")
-    xml.set("short_code", "CMPGN")
     for campaign in mem.query([Filter("type","=", "campaign")]):
+        intrusion = False
+        role_names = []
+        for sdo in mem.related_to(campaign):
+            if sdo['type'] == 'intrusion-set':
+                xml = SubElement(risk_analysis, 'role')
+                xml.set('name', sdo['name'])
+                xml.set('type', 'Attacker')
+                xml.set('short_code', short_code_gen(sdo['name']))
+                if 'description' in sdo.keys():
+                    xml.set('description', sdo['description'])
+                role_names.append(sdo['name'])
+                intrusion = True
+        
+        if intrusion:
+            xml = SubElement(risk_analysis, "role")
+            xml.set("name", "Campaign")
+            xml.set("type", "Attacker")
+            xml.set("short_code", "CMPGN")
+            role_names.append('Campaign')
+
         xml = SubElement(risk_analysis, 'attacker')
         xml.set("name", campaign["name"])
         xml.set("image", "")
@@ -220,8 +233,9 @@ def build_from_campaign(mem, risk_analysis):
 
         env = SubElement(xml, "attacker_environment")
         env.set("name", "Default")
-        role = SubElement(env, "attacker_role")
-        role.set("name", "Campaign")
+        for name in role_names:
+            role = SubElement(env, "attacker_role")
+            role.set("name", name)
 
     # No Motivation
     # No Capability
@@ -243,7 +257,10 @@ def build_threat(mem, risk_analysis):
         # Sets the Method if Present
         if 'description' in threat_keys:
             method = SubElement(xml, "method")
-            method.text = threat['description']
+            if len(threat['description']) < 400:
+                method.text = threat['description']
+            else:
+                method.text = threat['description'].splitlines()[0]
 
             # Use desc to certain detect threat type
             desc = threat["description"].lower()
@@ -271,15 +288,39 @@ def build_threat(mem, risk_analysis):
 
         env = SubElement(xml, "threat_environment")
         env.set("name", "Default")
-        #likelihood = input("Likelihood: ")
-        likelihood = "Remote"
-        env.set("likelihood", likelihood)
+
+        if 'x_likelihood' in threat_keys:
+            env.set('likelihood', threat['x_likelihood'])
+        else:
+            env.set("likelihood", 'Unknown')
+
+        if 'x_impacts' in threat_keys:
+            for prop in threat['x_impacts']:
+                value = None
+                if threat['x_impacts'][prop][0] == 0:
+                    continue
+                elif threat['x_impacts'][prop][0] == 1:
+                    value = 'Low'
+                elif threat['x_impacts'][prop][0] == 2:
+                    value = 'Medium'
+                elif threat['x_impacts'][prop][0] == 3:
+                    value = 'High'
+    
+                impact = SubElement(env, 'threatened_property')
+                impact.set('name', prop)
+                impact.set('value', value)
+                rationale = SubElement(impact, 'rationale')
+                rationale.text = threat['x_impacts'][prop][1]
 
         # Checks for attackers that has a direct SRO
         for sdo in mem.related_to(threat):
             if "threat-actor" == sdo["type"] or "campaign" == sdo["type"]:
                 attacker = SubElement(env, "threat_attacker")
                 attacker.set("name", sdo["name"])
+            
+            if sdo['type'] == 'x-asset':
+                asset = SubElement(env, 'threatened_asset')
+                asset.set('name', sdo['name'])
 
     # No Threatened Property
     # Importing into CAIRIS still successful
@@ -294,6 +335,8 @@ def build_vuln(mem, risk_analysis):
 
         if 'x_type' in vuln_keys:
             xml.set('type', vuln['x_type'])
+        else:
+            xml.set('type', 'Unspecified')
 
         if "description" in vuln_keys:
             desc = SubElement(xml, "description")
@@ -314,10 +357,6 @@ def build_vuln(mem, risk_analysis):
             env = SubElement(xml, 'vulnerability_environment')
             env.set('name', 'Default')
             env.set('severity', vuln['x_severity'])
-        else:
-            # Builds IRIS vulnerability based on CVE Info
-            env = build_from_cve(cve, xml)
-
 
             # Build from user input
             # 1. Type - Custom Done
@@ -334,79 +373,33 @@ def build_vuln(mem, risk_analysis):
                 asset.set('name', sdo['name'])
     return vuln_rels
 
-def build_from_cve(cve, xml):
-    # API (CERT Luxembourg)
-    cve_data = requests.get(f"http://cve.circl.lu/api/cve/{cve}").json()
-
-    # Gets type of Vuln, if possible
-    vuln_type = ""
-    if "capec" in cve_data.keys():
-        if cve_data["capec"]:
-            if "config" in cve_data["capec"][0]["solutions"].lower():
-                vuln_type = "Configuration"
-            elif "design" in cve_data["capec"][0]["solutions"].lower():
-                vuln_type = "Design"
-            elif "implement" in cve_data["capec"][0]["solutions"].lower():
-                vuln_type = "Implementation"
-    if not vuln_type:
-        #vuln_type = input("Type of Vulnerability: ")
-        vuln_type = "Design"
-    xml.set("type", vuln_type)
-
-    env = SubElement(xml, "vulnerability_environment")
-    env.set("name", "Default")
-
-    # Gets severity from cvss score, used NIST guidelines
-    if cve_data:
-        severity = "Negligible"
-        print("cvss")
-        if cve_data["cvss"] >= 9:
-            severity = "Catastrophic"
-        elif cve_data["cvss"] >= 7:
-            severity = "Critical"
-        elif cve_data["cvss"] >= 4:
-            severity = "Marginal"
-        env.set("severity", severity)
-
-
-    # Can retrive list of vulnerable assets affected by CVE.
-    # Not being used
-    # Checks if 'oval' exists and is not empty
-    if "oval" in cve_data.keys() and cve_data["oval"]:
-        if "definition_extensions" in cve_data["oval"][0].keys():
-            affect_assets = []
-            for ext_def in cve_data["oval"][0]["definition_extensions"]:
-                product = ext_def["comment"].split(" ")
-                asset = ""
-                for x in range(0, len(product)):
-                    # Checks for version numbers
-                    # This is done to reduce flooding asset section of same vulnerable assets
-                    if containsNumber(product[x]):
-                        # Checks if asset is already known
-                        if asset not in affect_assets:
-                            affect_assets.append(asset)
-                        asset = ""
-                        break
-                    if asset:
-                        asset += " " + product[x]
-                        continue
-                    asset += product[x]
-    return env
-
 def build_risk(mem, risk_analysis, vuln_rels):
     # Builds risk from known threats and vuln with SROs
+    associations = []
     count = 1
     for vuln, threat in vuln_rels:
         xml = SubElement(risk_analysis, "risk")
         xml.set("name", "Risk " + str(count))
         xml.set("vulnerability", vuln["name"])
         xml.set("threat", threat["name"])
-        count += 1
 
+        associations.append(("Risk " + str(count), threat['name']))
+        count += 1
+     
         env = SubElement(xml, "misusecase")
         env.set("environment", "Default")
         narrative = SubElement(env, "narrative")
         narrative.text = "Uses " + threat["name"] + " to exploit " + vuln["name"] + "."
+    return associations
+
+def build_associations(xml, associations):
+    association = SubElement(xml, 'associations')
+    for risk, threat in associations:
+        manual = SubElement(association, 'manual_association')
+        manual.set('from_name', risk)
+        manual.set('from_dim', 'risk')
+        manual.set('to_name', threat)
+        manual.set('to_dim', 'threat')
 
 def build_tvtypes(xml):
     vuln_type = {
