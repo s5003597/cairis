@@ -4,10 +4,8 @@ from stix2 import parse
 from xml.etree.ElementTree import Element, SubElement
 import xml.etree.ElementTree as ET
 
-s = '<?xml version="1.0"?>\n' +\
-    '<!DOCTYPE cairis_model PUBLIC "-//CAIRIS//DTD MODEL 1.0//EN" ' +\
-    '"http://cairis.org/dtd/cairis_model.dtd">'
-
+s = """<?xml version="1.0"?>
+<!DOCTYPE cairis_model PUBLIC "-//CAIRIS//DTD MODEL 1.0//EN" "http://cairis.org/dtd/cairis_model.dtd">"""
 
 def stix_to_iris(inputFile):
     # Parses to SIX Objects and Stores in Memory
@@ -33,13 +31,10 @@ def stix_to_iris(inputFile):
     vuln_rels = build_vuln(mem, risk_analysis)
     build_risk(mem, risk_analysis, vuln_rels)
 
-    # build_associations(cairis_model, associations)
-
     return s + ET.tostring(cairis_model).decode('utf-8')
 
-
 def build_assets(mem, risk_analysis):
-    for asset in mem.query([Filter("type", "=", "x-asset")]):
+    for asset in mem.query([Filter("type","=", "x-cairis-asset")]):
         xml = SubElement(risk_analysis, 'asset')
         xml.set('name', asset['name'])
         xml.set('short_code', short_code_gen([asset['name']]))
@@ -73,10 +68,9 @@ def build_assets(mem, risk_analysis):
             rationale = SubElement(sec_prop, 'rationale')
             rationale.text = asset['impact'][prop][1]
 
-
 def build_attacker(mem, risk_analysis):
     available = False
-    for threat_actor in mem.query([Filter("type", "=", "threat-actor")]):
+    for threat_actor in mem.query([Filter("type","=", "threat-actor")]):
         xml = SubElement(risk_analysis, 'attacker')
 
         name = threat_actor["name"]
@@ -103,15 +97,13 @@ def build_attacker(mem, risk_analysis):
                 # Creates IRIS Role
                 xml = SubElement(risk_analysis, 'role')
                 role_attrib = role.rsplit('-', 1)
-                rtypes = ['Attacker', 'Stakeholder', 'Data Subject',
-                          'Data Processor', 'Data Controller']
+                rtypes = ['Attacker', 'Stakeholder', 'Data Subject', 'Data Processor', 'Data Controller']
                 rattacker = None
                 if len(role_attrib) > 1 and role_attrib[-1] in rtypes:
                     rattacker = role_attrib[0]
                     xml.set('name', rattacker.replace('-', ' '))
                     xml.set('type', role_attrib[-1])
-                    xml.set('short_code',
-                            short_code_gen(role_attrib[0].split('-')))
+                    xml.set('short_code', short_code_gen(role_attrib[0].split('-')))
                 else:
                     rattacker = role
                     xml.set('name', rattacker.replace('-', ' '))
@@ -136,22 +128,19 @@ def build_attacker(mem, risk_analysis):
         if 'resource_level' in threat_actor_keys:
             # Resources/Equipment, Resources/Facilities, Resources/Funding
             # Resources/Personnel and Time
-            if 'inidivdual' == threat_actor['resource_level'] or\
-               'club' == threat_actor['resource_level']:
+            if 'inidivdual' == threat_actor['resource_level'] or 'club' == threat_actor['resource_level']:
                 capabilities.extend([
                     ('Resources/Equipment', 'Low'),
                     ('Resources/Facilities', 'Low'),
                     ('Resources/Funding', 'Low'),
                 ])
-            elif 'contest' == threat_actor['resource_level'] or\
-                 'team' == threat_actor['resource_level']:
+            elif 'contest' == threat_actor['resource_level'] or 'team' == threat_actor['resource_level']:
                 capabilities.extend([
                     ('Resources/Equipment', 'Medium'),
                     ('Resources/Facilities', 'Medium'),
                     ('Resources/Funding', 'Medium'),
                 ])
-            elif 'organization' == threat_actor['resource_level'] or\
-                 'government' == threat_actor['resource_level']:
+            elif 'organization' == threat_actor['resource_level'] or 'government' == threat_actor['resource_level']:
                 capabilities.extend([
                     ('Resources/Equipment', 'High'),
                     ('Resources/Facilities', 'High'),
@@ -173,16 +162,14 @@ def build_attacker(mem, risk_analysis):
                     ('Knowledge/Books and Manuals', 'Medium'),
                     ('Software', 'Low'),
                 ])
-            if 'advanced' == threat_actor['sophistication'] or\
-               'expert' == threat_actor['sohpistication']:
+            if 'advanced' == threat_actor['sophistication'] or 'expert' == threat_actor['sohpistication']:
                 capabilities.extend([
                     ('Knowledge/Education and Training', 'High'),
                     ('Knowledge/Books and Manuals', 'High'),
                     ('Software', 'Medium'),
                     ('Technology', 'Medium')
                 ])
-            if 'innovator' == threat_actor['sophistication'] or\
-               'strategic' == threat_actor['sophistication']:
+            if 'innovator' == threat_actor['sophistication'] or 'strategic' == threat_actor['sophistication']:
                 capabilities.extend([
                     ('Knowledge/Education and Training', 'High'),
                     ('Knowledge/Books and Manuals', 'High'),
@@ -197,17 +184,15 @@ def build_attacker(mem, risk_analysis):
         available = True
 
     if not available:
-        # Not all risks have known threat actors,
-        # when a threat is carried out without known
+        # Not all risks have known threat actors, when a threat is carried out without known
         # threat actors, they are linked to campaigns. E.g poisonivy.json
         # Campaign represents a group of unknown threat actors
         build_from_campaign(mem, risk_analysis)
 
-
 def build_from_campaign(mem, risk_analysis):
     # Campaign has limited property values, since it represents a group of
     # threat actors, a default campaign role will be set.
-    for campaign in mem.query([Filter("type", "=", "campaign")]):
+    for campaign in mem.query([Filter("type","=", "campaign")]):
         intrusion = False
         role_names = []
         for sdo in mem.related_to(campaign):
@@ -220,7 +205,7 @@ def build_from_campaign(mem, risk_analysis):
                     xml.set('description', sdo['description'])
                 role_names.append(sdo['name'])
                 intrusion = True
-
+        
         if intrusion:
             xml = SubElement(risk_analysis, "role")
             xml.set("name", "Campaign")
@@ -249,7 +234,6 @@ def build_from_campaign(mem, risk_analysis):
 
     # No Motivation
     # No Capability
-
 
 def build_threat(mem, risk_analysis):
     # Patterns, malware and tools all can represent as a threat
@@ -300,42 +284,41 @@ def build_threat(mem, risk_analysis):
         env = SubElement(xml, "threat_environment")
         env.set("name", "Default")
 
-        if 'x_likelihood' in threat_keys:
-            env.set('likelihood', threat['x_likelihood'])
+        if 'x_cairis_likelihood' in threat_keys:
+            env.set('likelihood', threat['x_cairis_likelihood'])
         else:
             env.set("likelihood", 'Unknown')
 
-        if 'x_impacts' in threat_keys:
-            for prop in threat['x_impacts']:
+        if 'x_cairis_impacts' in threat_keys:
+            for prop in threat['x_cairis_impacts']:
                 value = None
-                if threat['x_impacts'][prop][0] == 0:
+                if threat['x_cairis_impacts'][prop][0] == 0:
                     continue
-                elif threat['x_impacts'][prop][0] == 1:
+                elif threat['x_cairis_impacts'][prop][0] == 1:
                     value = 'Low'
-                elif threat['x_impacts'][prop][0] == 2:
+                elif threat['x_cairis_impacts'][prop][0] == 2:
                     value = 'Medium'
-                elif threat['x_impacts'][prop][0] == 3:
+                elif threat['x_cairis_impacts'][prop][0] == 3:
                     value = 'High'
-
+    
                 impact = SubElement(env, 'threatened_property')
                 impact.set('name', prop)
                 impact.set('value', value)
                 rationale = SubElement(impact, 'rationale')
-                rationale.text = threat['x_impacts'][prop][1]
+                rationale.text = threat['x_cairis_impacts'][prop][1]
 
         # Checks for attackers that has a direct SRO
         for sdo in mem.related_to(threat):
             if "threat-actor" == sdo["type"] or "campaign" == sdo["type"]:
                 attacker = SubElement(env, "threat_attacker")
                 attacker.set("name", sdo["name"])
-
-            if sdo['type'] == 'x-asset':
+            
+            if sdo['type'] == 'x-cairis-asset':
                 asset = SubElement(env, 'threatened_asset')
                 asset.set('name', sdo['name'])
 
     # No Threatened Property
     # Importing into CAIRIS still successful
-
 
 def build_vuln(mem, risk_analysis):
     vuln_rels = []
@@ -345,8 +328,8 @@ def build_vuln(mem, risk_analysis):
 
         vuln_keys = vuln.keys()
 
-        if 'x_type' in vuln_keys:
-            xml.set('type', vuln['x_type'])
+        if 'x_cairis_type' in vuln_keys:
+            xml.set('type', vuln['x_cairis_type'])
         else:
             xml.set('type', 'Unspecified')
 
@@ -365,10 +348,10 @@ def build_vuln(mem, risk_analysis):
                     if ext_ref["source_name"] == "cve":
                         cve = ext_ref["external_id"]
         env = None
-        if 'x_severity' in vuln_keys:
+        if 'x_cairis_severity' in vuln_keys:
             env = SubElement(xml, 'vulnerability_environment')
             env.set('name', 'Default')
-            env.set('severity', vuln['x_severity'])
+            env.set('severity', vuln['x_cairis_severity'])
 
             # Build from user input
             # 1. Type - Custom Done
@@ -377,16 +360,13 @@ def build_vuln(mem, risk_analysis):
         # Checks for any vulnerabilities that have SROs with threats
         # Used when building risks
         for sdo in mem.related_to(vuln):
-            if sdo["type"] == "attack-pattern" or\
-               sdo["type"] == "malware" or\
-               sdo["type"] == "tool":
+            if sdo["type"] == "attack-pattern" or sdo["type"] == "malware" or sdo["type"] == "tool":
                 vuln_rels.append((vuln, sdo))
-
-            if sdo['type'] == 'x-asset':
+            
+            if sdo['type'] == 'x-cairis-asset':
                 asset = SubElement(env, 'vulnerable_asset')
                 asset.set('name', sdo['name'])
     return vuln_rels
-
 
 def build_risk(mem, risk_analysis, vuln_rels):
     # Builds risk from known threats and vuln with SROs
@@ -400,14 +380,12 @@ def build_risk(mem, risk_analysis, vuln_rels):
 
         associations.append(("Risk " + str(count), threat['name']))
         count += 1
-
+     
         env = SubElement(xml, "misusecase")
         env.set("environment", "Default")
         narrative = SubElement(env, "narrative")
-        narrative.text = "Uses " + threat["name"] +\
-                         " to exploit " + vuln["name"] + "."
+        narrative.text = "Uses " + threat["name"] + " to exploit " + vuln["name"] + "."
     return associations
-
 
 def build_associations(xml, associations):
     association = SubElement(xml, 'associations')
@@ -417,7 +395,6 @@ def build_associations(xml, associations):
         manual.set('from_dim', 'risk')
         manual.set('to_name', threat)
         manual.set('to_dim', 'threat')
-
 
 def build_tvtypes(xml):
     vuln_type = {
@@ -450,11 +427,9 @@ def build_tvtypes(xml):
         desc = SubElement(threattype, 'description')
         desc.text = threat_type[key]
 
-
 def containsNumber(inputString):
     # Checks if a number is in a string
     return any(char.isdigit() for char in inputString)
-
 
 def short_code_gen(words):
     # Generates short code by taking first 3 letters
@@ -463,21 +438,20 @@ def short_code_gen(words):
         short_code += word[0:3].capitalize()
     return short_code
 
-
 def motivation_format(motivations):
     # Converts STIX Terms into IRIS terms
     # Defined by STIX core documentation
     motivation_terms = {
-        'accidental': 'Accident',
-        'coercion': 'Cyber-extortion',
-        'ideology': 'Hacktivism',
-        'notoriety': 'Headlines/press',
-        'dominance': 'Improved esteem',
-        'organizational-gain': 'Improved organisational position',
-        'unpredictable': 'Indifference',
-        'personal-gain': 'Money',
-        'revenge': 'Revenge',
-        'personal-satisfaction': 'Thrill-seeking',
+        'accidental'            :'Accident',
+        'coercion'              :'Cyber-extortion',
+        'ideology'              :'Hacktivism',
+        'notoriety'             :'Headlines/press',
+        'dominance'             :'Improved esteem',
+        'organizational-gain'   :'Improved organisational position',
+        'unpredictable'         :'Indifference',
+        'personal-gain'         :'Money',
+        'revenge'               :'Revenge',
+        'personal-satisfaction' :'Thrill-seeking',
     }
 
     # Formats motivations
@@ -486,5 +460,5 @@ def motivation_format(motivations):
         if motivation in motivation_terms.keys():
             motivs.append(motivation_terms[motivation])
         else:
-            motivs.append(motivation)
+            motivs.append(motivation.replace('-', ' ').capitalize())
     return motivs
