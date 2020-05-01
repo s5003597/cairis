@@ -36,7 +36,7 @@ def stix_to_iris(inputFile):
 def build_assets(mem, risk_analysis):
     for asset in mem.query([Filter("type","=", "x-cairis-asset")]):
         xml = SubElement(risk_analysis, 'asset')
-        xml.set('name', asset['name'])
+        xml.set('name', reserved_check(asset['name']))
         xml.set('short_code', short_code_gen([asset['name']]))
         xml.set('type', asset['asset_type'])
         xml.set('is_critical', '0')
@@ -75,7 +75,7 @@ def build_attacker(mem, risk_analysis):
 
         name = threat_actor["name"]
 
-        xml.set('name', name)
+        xml.set('name', reserved_check(name))
         xml.set('image', '')
 
         threat_actor_keys = threat_actor.keys()
@@ -214,7 +214,7 @@ def build_from_campaign(mem, risk_analysis):
             role_names.append('Campaign')
 
         xml = SubElement(risk_analysis, 'attacker')
-        xml.set("name", campaign["name"])
+        xml.set("name", reserved_check(campaign["name"]))
         xml.set("image", "")
 
         if "aliaes" in campaign.keys():
@@ -244,7 +244,7 @@ def build_threat(mem, risk_analysis):
     # Loops through each SDO collected
     for threat in (attack_patterns + malwares + tools):
         xml = SubElement(risk_analysis, "threat")
-        xml.set("name", threat['name'])
+        xml.set("name", reserved_check(threat['name']))
 
         threat_keys = threat.keys()
 
@@ -311,11 +311,11 @@ def build_threat(mem, risk_analysis):
         for sdo in mem.related_to(threat):
             if "threat-actor" == sdo["type"] or "campaign" == sdo["type"]:
                 attacker = SubElement(env, "threat_attacker")
-                attacker.set("name", sdo["name"])
+                attacker.set("name", reserved_check(sdo["name"]))
             
             if sdo['type'] == 'x-cairis-asset':
                 asset = SubElement(env, 'threatened_asset')
-                asset.set('name', sdo['name'])
+                asset.set('name', reserved_check(sdo['name']))
 
     # No Threatened Property
     # Importing into CAIRIS still successful
@@ -324,7 +324,7 @@ def build_vuln(mem, risk_analysis):
     vuln_rels = []
     for vuln in mem.query([Filter("type", "=", "vulnerability")]):
         xml = SubElement(risk_analysis, "vulnerability")
-        xml.set("name", vuln["name"])
+        xml.set("name", reserved_check(vuln["name"]))
 
         vuln_keys = vuln.keys()
 
@@ -365,20 +365,18 @@ def build_vuln(mem, risk_analysis):
             
             if sdo['type'] == 'x-cairis-asset':
                 asset = SubElement(env, 'vulnerable_asset')
-                asset.set('name', sdo['name'])
+                asset.set('name', reserved_check(sdo['name']))
     return vuln_rels
 
 def build_risk(mem, risk_analysis, vuln_rels):
     # Builds risk from known threats and vuln with SROs
-    associations = []
     count = 1
     for vuln, threat in vuln_rels:
         xml = SubElement(risk_analysis, "risk")
         xml.set("name", "Risk " + str(count))
-        xml.set("vulnerability", vuln["name"])
-        xml.set("threat", threat["name"])
+        xml.set("vulnerability", reserved_check(vuln["name"]))
+        xml.set("threat", reserved_check(threat["name"]))
 
-        associations.append(("Risk " + str(count), threat['name']))
         count += 1
      
         env = SubElement(xml, "misusecase")
@@ -386,15 +384,6 @@ def build_risk(mem, risk_analysis, vuln_rels):
         narrative = SubElement(env, "narrative")
         narrative.text = "Uses " + threat["name"] + " to exploit " + vuln["name"] + "."
     return associations
-
-def build_associations(xml, associations):
-    association = SubElement(xml, 'associations')
-    for risk, threat in associations:
-        manual = SubElement(association, 'manual_association')
-        manual.set('from_name', risk)
-        manual.set('from_dim', 'risk')
-        manual.set('to_name', threat)
-        manual.set('to_dim', 'threat')
 
 def build_tvtypes(xml):
     vuln_type = {
@@ -462,3 +451,10 @@ def motivation_format(motivations):
         else:
             motivs.append(motivation.replace('-', ' ').capitalize())
     return motivs
+
+def reserved_check(word):
+    reserv_list = """<>‘`”\:%_*/?#£$"""
+    for char in reserv_list:
+        if char in word:
+            word = word.replace(char, ' ')
+    return word
