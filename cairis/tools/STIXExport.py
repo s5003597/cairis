@@ -5,7 +5,9 @@ from stix2 import Vulnerability, Relationship, ThreatActor
 from stix2 import AttackPattern, Malware, Tool, Bundle
 import xml.sax
 
-PROP_TYPES = ['confidentiality', 'integrity', 'availability', 'accountability', 'anonmity', 'pseudonymity', 'unlinkability', 'unobservability']
+PROP_TYPES = ['confidentiality', 'integrity', 'availability', 'accountability',
+              'anonmity', 'pseudonymity', 'unlinkability', 'unobservability']
+
 
 @CustomObject('x-cairis-asset', [
     ('name', properties.StringProperty(required=True)),
@@ -15,34 +17,36 @@ PROP_TYPES = ['confidentiality', 'integrity', 'availability', 'accountability', 
     ('impact', properties.DictionaryProperty(required=True)),
     ('labels', properties.ListProperty(contained=str)),
 ])
-
 class Asset(object):
     def __init__(self, asset_type=None, impact=None, **kwargs):
-        if asset_type and asset_type not in ['Hardware', 'Information', 'People', 'Software', 'System of Systems', 'Systems', 'Systems - General']:
-            raise ValueError("'%s' is not a recognized asset type." % asset_type)
+        if asset_type and asset_type not in ['Hardware', 'Information',
+                                             'People', 'Software',
+                                             'System of Systems', 'Systems',
+                                             'Systems - General']:
+            raise ValueError(f"'{asset_type}' is not an asset type.")
         if impact:
             for item in impact.items():
                 if item[0] not in PROP_TYPES:
-                    raise ValueError("'%s' is not a recognized impact type." % item[0])
+                    raise ValueError(f"'{item[0]}' is not an impact type.")
                 if item[1][0] not in [0, 1, 2, 3]:
-                    raise ValueError("'%s' is not a valid value." % item[1][0])
+                    raise ValueError(f"'{item[1][0]}' is not a valid value.")
+
 
 def iris_to_stix(inputFile):
     handler = RiskAnalysisContentHandler()
     xml.sax.parseString(inputFile, handler)
     mem = MemoryStore()
 
-
-
     build_assets(handler.assets(), mem)
     build_vulns(handler.vulnerabilities(), mem)
     build_threatactors(handler.attackers(), handler.roles(), mem)
     build_threats(handler.threats(), mem)
     build_risks(handler.risks(), mem)
-    
+
     all_objs = Bundle(mem.query())
 
     return all_objs.serialize(encoding='utf-8')
+
 
 def build_assets(assets, mem):
     for asset in assets:
@@ -58,11 +62,12 @@ def build_assets(assets, mem):
                     asset_type=asset.type(),
                     significance=asset.significance(),
                     impact=impacts,
-                    labels=asset.tags() ))
+                    labels=asset.tags()))
+
 
 def build_vulns(vulns, mem):
     for vuln in vulns:
-    
+
         # Gets CVE From Tags if present
         external_ref = []
         if vuln.tags():
@@ -73,27 +78,28 @@ def build_vulns(vulns, mem):
                         'external_id': tag})
                     break
 
-        
         stix_vuln = Vulnerability(
                 name=vuln.name(),
                 description=vuln.description(),
                 external_references=external_ref,
                 custom_properties={
                     'x_cairis_type': vuln.type(),
-                    'x_cairis_severity': vuln.environmentProperties()[0].severity()
+                    'x_cairis_severity': vuln.environmentProperties()[0]
+                                         .severity()
                 }
             )
-        
+
         mem.add(stix_vuln)
 
         for envprop in vuln.environmentProperties():
             for asset in envprop.assets():
-                for sdo in mem.query([Filter("type","=", "x-cairis-asset")]):
+                for sdo in mem.query([Filter("type", "=", "x-cairis-asset")]):
                     if asset == sdo['name']:
                         mem.add(Relationship(
                             relationship_type='targets',
                             source_ref=stix_vuln,
-                            target_ref=sdo ))
+                            target_ref=sdo))
+
 
 def build_threatactors(attackers, risk_roles, mem):
     for attacker in attackers:
@@ -108,7 +114,8 @@ def build_threatactors(attackers, risk_roles, mem):
             roles = []
             for role in risk_roles:
                 if role.name() in attacker_roles:
-                    roles.append(role.name().replace(' ', '-') + '-' + role.type())
+                    roles.append(role.name().replace(' ', '-') + '-'
+                                 + role.type())
             # Gets Capabilities
             res_low, res_med, res_high = 0, 0, 0
             soph_low, soph_med, soph_high = 0, 0, 0
@@ -144,7 +151,7 @@ def build_threatactors(attackers, risk_roles, mem):
                     capabilities.append('club')
                 else:
                     capabilities.append('individual')
-        
+
             if soph_high >= 2:
                 if soph_low > 0:
                     capabilities.append('expert')
@@ -167,12 +174,14 @@ def build_threatactors(attackers, risk_roles, mem):
                 resource_level=capabilities[0],
                 sophistication=capabilities[1],
                 primary_motivation=motives[0],
-                secondary_motivations=motives[1:] ))
+                secondary_motivations=motives[1:]))
+
 
 def build_threats(threats, mem):
     for threat in threats:
         custom_properties = {
-            'x_cairis_likelihood': threat.environmentProperties()[0].likelihood(),
+            'x_cairis_likelihood':
+                threat.environmentProperties()[0].likelihood(),
         }
 
         assets, attackers = [], []
@@ -187,7 +196,9 @@ def build_threats(threats, mem):
             attackers.extend(envprop.attackers())
 
         threat_sdo = None
-        if threat.type() == 'Electronic/Malware' or threat.type() == 'Electronic/DoS and DDoS' or threat.type() == 'Electronic/Keystoke Logging':
+        if threat.type() == 'Electronic/Malware' or \
+            threat.type() == 'Electronic/DoS and DDoS' or \
+                threat.type() == 'Electronic/Keystoke Logging':
             labels = threat.tags() if threat.tags() else malware_labels(threat)
             threat_sdo = Malware(
                 name=threat.name(),
@@ -218,11 +229,11 @@ def build_threats(threats, mem):
                 external_references=external_ref,
                 custom_properties=custom_properties,
             )
-        
+
         mem.add(threat_sdo)
 
         # Creates SRO between Threat & Asset
-        asset_sdos = mem.query([Filter("type","=", "x-cairis-asset")])
+        asset_sdos = mem.query([Filter("type", "=", "x-cairis-asset")])
         for asset in assets:
             for sdo in asset_sdos:
                 if asset == sdo['name']:
@@ -231,8 +242,8 @@ def build_threats(threats, mem):
                         source_ref=threat_sdo,
                         target_ref=sdo
                     ))
-        # Creates SRO between Threat & Attacker
-        attacker_sdos = mem.query([Filter("type","=", "threat-actor")])
+        # Creates SRO between Threat & Attacker
+        attacker_sdos = mem.query([Filter("type", "=", "threat-actor")])
         for attacker in attackers:
             for sdo in attacker_sdos:
                 if attacker == sdo['name']:
@@ -242,12 +253,13 @@ def build_threats(threats, mem):
                         target_ref=threat_sdo
                     ))
 
+
 def build_risks(risks, mem):
     # Since risks are infered, only SROs are created
-    threat_sdos = mem.query([Filter("type","=", "attack-pattern")]) +\
-                  mem.query([Filter("type","=", "malware")]) +\
-                  mem.query([Filter("type","=", "tool")])
-    vuln_sdos = mem.query([Filter("type","=", "vulnerability")])
+    threat_sdos = mem.query([Filter("type", "=", "attack-pattern")]) +\
+                  mem.query([Filter("type", "=", "malware")]) +\
+                  mem.query([Filter("type", "=", "tool")])
+    vuln_sdos = mem.query([Filter("type", "=", "vulnerability")])
 
     for risk in risks:
         threat = None
@@ -258,12 +270,13 @@ def build_risks(risks, mem):
         for sdo in vuln_sdos:
             if sdo['name'] == risk.vulnerability():
                 vuln = sdo
-        
+
         mem.add(Relationship(
             relationship_type='targets',
             source_ref=threat,
             target_ref=vuln
         ))
+
 
 def tool_labels(threat):
     stix_vocab = [
@@ -272,13 +285,14 @@ def tool_labels(threat):
         'credential-exploitation', 'remote-access',
         'vulnerability-scanning',
     ]
-    labels =[]
+    labels = []
     for vocab in stix_vocab:
         if vocab.replace('-', ' ') in threat.metho():
             labels.append(vocab)
     if labels:
         return labels
     return ['tool']
+
 
 def malware_labels(threat):
     stix_vocab = [
@@ -293,7 +307,7 @@ def malware_labels(threat):
         labels.append('ddos')
     if threat.type() == 'Electronic/Keystoke Logging':
         labels.append('keylogger')
-    
+
     for vocab in stix_vocab:
         if vocab.replace('-', ' ') in threat.method():
             labels.append(vocab)
@@ -301,11 +315,12 @@ def malware_labels(threat):
         return labels
     return ['malware']
 
+
 def format_motives(motives):
     motivation_terms = {
-        'Accident':'accidental',
-        'Cyber-extortion':'coercion',
-        'Hacktivism':'ideology',
+        'Accident': 'accidental',
+        'Cyber-extortion': 'coercion',
+        'Hacktivism': 'ideology',
         'Headlines/press': 'notoriety',
         'Improved esteem': 'dominance',
         'Improved organisational position': 'organizational-gain',
@@ -320,8 +335,9 @@ def format_motives(motives):
             stix_motives.append(motivation_terms[motive])
             continue
         stix_motives.append(motive.lower().replace(' ', '-'))
-    
+
     return stix_motives
+
 
 def infer_threat_labels(labels):
     label_terms = {
@@ -338,5 +354,5 @@ def infer_threat_labels(labels):
             stix_labels.append(label_terms[label])
             continue
         stix_labels.append(label)
-    
+
     return stix_labels
