@@ -1,8 +1,11 @@
+from .STIXExport import Asset
 from stix2 import MemoryStore, Filter
 from stix2 import parse
 
 from xml.etree.ElementTree import Element, SubElement
 import xml.etree.ElementTree as ET
+
+import requests
 
 s = """<?xml version="1.0"?>
 <!DOCTYPE cairis_model PUBLIC "-//CAIRIS//DTD MODEL 1.0//EN" "http://cairis.org/dtd/cairis_model.dtd">"""
@@ -128,53 +131,94 @@ def build_attacker(mem, risk_analysis):
         if 'resource_level' in threat_actor_keys:
             # Resources/Equipment, Resources/Facilities, Resources/Funding
             # Resources/Personnel and Time
-            if 'inidivdual' == threat_actor['resource_level'] or 'club' == threat_actor['resource_level']:
+            if 'individual' == threat_actor['resource_level']:
                 capabilities.extend([
                     ('Resources/Equipment', 'Low'),
                     ('Resources/Facilities', 'Low'),
                     ('Resources/Funding', 'Low'),
+                    ('Resources/Personnel and Time', 'Low')
                 ])
-            elif 'contest' == threat_actor['resource_level'] or 'team' == threat_actor['resource_level']:
+            elif 'club' == threat_actor['resource_level']:
+                capabilities.extend([
+                    ('Resources/Equipment', 'Medium'),
+                    ('Resources/Facilities', 'Low'),
+                    ('Resources/Funding', 'Low'),
+                    ('Resources/Personnel and Time', 'Low')
+                ])
+            elif 'contest' == threat_actor['resource_level']:
                 capabilities.extend([
                     ('Resources/Equipment', 'Medium'),
                     ('Resources/Facilities', 'Medium'),
                     ('Resources/Funding', 'Medium'),
+                    ('Resources/Personnel and Time', 'Low')
                 ])
-            elif 'organization' == threat_actor['resource_level'] or 'government' == threat_actor['resource_level']:
+            elif 'team' == threat_actor['resource_level']:
+                capabilities.extend([
+                    ('Resources/Equipment', 'Medium'),
+                    ('Resources/Facilities', 'Low'),
+                    ('Resources/Funding', 'Low'),
+                    ('Resources/Personnel and Time', 'Medium')
+                ])
+            elif 'organization' == threat_actor['resource_level']:
+                capabilities.extend([
+                    ('Resources/Equipment', 'High'),
+                    ('Resources/Facilities', 'Medium'),
+                    ('Resources/Funding', 'Medium'),
+                    ('Resources/Personnel and Time', 'High')
+                ])
+            elif 'government' == threat_actor['resource_level']:
                 capabilities.extend([
                     ('Resources/Equipment', 'High'),
                     ('Resources/Facilities', 'High'),
                     ('Resources/Funding', 'High'),
+                    ('Resources/Personnel and Time', 'High')
                 ])
 
-        if 'sophitication' in threat_actor_keys:
+        if 'sophistication' in threat_actor_keys:
             # Knowledge/Books and Manuals, Education and Training
             # Software, Technology
             if 'minimal' == threat_actor['sophistication']:
                 capabilities.extend([
                     ('Knowledge/Education and Training', 'Low'),
                     ('Software', 'Low'),
-                    ('Technology', 'Low'),
+                    ('Knowledge/Books and Manuals', 'Low'),
                 ])
-            if 'intermediate' == threat_actor['sohpistication']:
+            elif 'intermediate' == threat_actor['sophistication']:
                 capabilities.extend([
                     ('Knowledge/Education and Training', 'Medium'),
-                    ('Knowledge/Books and Manuals', 'Medium'),
-                    ('Software', 'Low'),
-                ])
-            if 'advanced' == threat_actor['sophistication'] or 'expert' == threat_actor['sohpistication']:
-                capabilities.extend([
-                    ('Knowledge/Education and Training', 'High'),
-                    ('Knowledge/Books and Manuals', 'High'),
                     ('Software', 'Medium'),
+                    ('Knowledge/Books and Manuals', 'Medium'),
+                ])
+            elif 'advanced' == threat_actor['sophistication']:
+                capabilities.extend([
+                    ('Knowledge/Education and Training', 'Medium'),
+                    ('Software', 'Medium'),
+                    ('Knowledge/Books and Manuals', 'Medium'),
                     ('Technology', 'Medium')
                 ])
-            if 'innovator' == threat_actor['sophistication'] or 'strategic' == threat_actor['sophistication']:
+            elif 'expert' == threat_actor['sophistication']:
                 capabilities.extend([
                     ('Knowledge/Education and Training', 'High'),
-                    ('Knowledge/Books and Manuals', 'High'),
                     ('Software', 'High'),
-                    ('Technology', 'High')
+                    ('Knowledge/Books and Manuals', 'High'),
+                    ('Technology', 'High'),
+                    ('Knowledge/Methods', 'Low')
+                ])
+            elif 'innovator' == threat_actor['sophistication']:
+                capabilities.extend([
+                    ('Knowledge/Education and Training', 'High'),
+                    ('Software', 'High'),
+                    ('Knowledge/Books and Manuals', 'High'),
+                    ('Technology', 'High'),
+                    ('Knowledge/Methods', 'Medium')
+                ])
+            elif 'strategic' == threat_actor['sophistication']:
+                capabilities.extend([
+                    ('Knowledge/Education and Training', 'High'),
+                    ('Software', 'High'),
+                    ('Knowledge/Books and Manuals', 'High'),
+                    ('Technology', 'High'),
+                    ('Knowledge/Methods', 'High')
                 ])
 
         for capability in capabilities:
@@ -205,7 +249,7 @@ def build_from_campaign(mem, risk_analysis):
                     xml.set('description', sdo['description'])
                 role_names.append(sdo['name'])
                 intrusion = True
-        
+
         if intrusion:
             xml = SubElement(risk_analysis, "role")
             xml.set("name", "Campaign")
@@ -370,6 +414,7 @@ def build_vuln(mem, risk_analysis):
 
 def build_risk(mem, risk_analysis, vuln_rels):
     # Builds risk from known threats and vuln with SROs
+
     count = 1
     for vuln, threat in vuln_rels:
         xml = SubElement(risk_analysis, "risk")
@@ -382,8 +427,7 @@ def build_risk(mem, risk_analysis, vuln_rels):
         env = SubElement(xml, "misusecase")
         env.set("environment", "Default")
         narrative = SubElement(env, "narrative")
-        narrative.text = "Uses " + threat["name"] + " to exploit " + vuln["name"] + "."
-    return associations
+        narrative.text = "Uses " + threat["name"] + " to exploit " + vuln["name"]
 
 def build_tvtypes(xml):
     vuln_type = {

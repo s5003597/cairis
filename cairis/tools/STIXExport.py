@@ -110,29 +110,51 @@ def build_threatactors(attackers, risk_roles, mem):
                 if role.name() in attacker_roles:
                     roles.append(role.name().replace(' ', '-') + '-' + role.type())
             # Gets Capabilities
-            resource_count, soph_count = 0, 0
+            res_low, res_med, res_high = 0, 0, 0
+            soph_low, soph_med, soph_high = 0, 0, 0
             for (name, value) in envprop.capabilities():
                 if name.startswith('Resource/'):
-                    if value == 'High':
-                        resource_count += 1
-                    elif value == 'Low':
-                        resource_count -= 1
+                    if value == 'Low':
+                        res_low += 1
+                    elif value == 'Medium':
+                        res_med += 1
+                    elif value == 'High':
+                        res_high += 1
                 else:
-                    if value == 'High':
-                        soph_count += 1
-                    elif value == 'Low': 
-                        soph_count -= 1
+                    if value == 'Low':
+                        soph_low += 1
+                    elif value == 'Medium':
+                        soph_med += 1
+                    elif value == 'High':
+                        soph_high += 1
+
             # Checks count to determine levels
-            if resource_count >= 2:
-                capabilities.append('government')
-            elif resource_count >= 1:
-                capabilities.append('content')
+            if res_high >= 2:
+                if res_med > 1:
+                    capabilities.append('organisation')
+                else:
+                    capabilities.append('government')
+            elif res_med >= 2:
+                if res_low >= 1:
+                    capabilities.append('team')
+                else:
+                    capabilities.append('contest')
             else:
-                capabilities.append('inidivdual')
+                if res_med > 0:
+                    capabilities.append('club')
+                else:
+                    capabilities.append('individual')
         
-            if soph_count >= 2:
+            if soph_high >= 2:
+                if soph_low > 0:
+                    capabilities.append('expert')
+                elif soph_med > 0:
+                    capabilities.append('innovator')
+                else:
+                    capabilities.append('strategic')
+            elif soph_med > 3:
                 capabilities.append('advanced')
-            elif soph_count >= 1:
+            elif soph_med > 1:
                 capabilities.append('intermediate')
             else:
                 capabilities.append('minimal')
