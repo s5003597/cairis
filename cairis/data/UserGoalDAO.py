@@ -34,7 +34,10 @@ class UserGoalDAO(CairisDAO):
   def __init__(self, session_id):
     CairisDAO.__init__(self, session_id)
 
-  def get_user_goals(self,constraint_id = -1):
+  def get_object_by_name(self,name):
+    return self.get_objects(name)
+
+  def get_objects(self,constraint_id = -1):
     try:
       if (constraint_id != -1):
         constraint_id = self.db_proxy.getDimensionId(constraint_id,'synopsis')
@@ -54,7 +57,7 @@ class UserGoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def add_user_goal(self, ug):
+  def add_object(self, ug):
     try:
       self.db_proxy.addUserGoal(ug)
     except ARMException as ex:
@@ -62,7 +65,7 @@ class UserGoalDAO(CairisDAO):
       raise ARMHTTPError(ex)
 
 
-  def update_user_goal(self,ug,name):
+  def update_object(self,ug,name):
     try:
       ugPCs = self.db_proxy.conflictingPersonaCharacteristics(ug.theActor,name)
       if (len(ugPCs) == 0):
@@ -80,7 +83,7 @@ class UserGoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def delete_user_goal(self, name):
+  def delete_object(self, name):
     try:
       ugId = self.db_proxy.getDimensionId(name,'synopsis')
       self.db_proxy.deleteUserGoal(ugId)
@@ -106,13 +109,14 @@ class UserGoalDAO(CairisDAO):
       self.close()
       raise MalformedJSONHTTPError()
 
-  def get_user_goal_model(self, environment_name, filter_element):
+  def get_user_goal_model(self, environment_name, filter_element, pathValues = []):
     fontName, fontSize, apFontName = get_fonts(session_id=self.session_id)
+    if filter_element == 'all':
+      filter_element = ''
     try:
       gcs = self.db_proxy.getGoalContributions(environment_name,filter_element)
       ugm = UserGoalModel(gcs,environment_name,self.db_proxy,font_name=fontName, font_size=fontSize)
       dot_code = ugm.graph()
-
       if not dot_code:
         raise ObjectNotFoundHTTPError('The user goal model')
       return dot_code

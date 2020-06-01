@@ -36,9 +36,9 @@ __author__ = 'Shamal Faily'
 
 class ObstacleDAO(CairisDAO):
   def __init__(self, session_id):
-    CairisDAO.__init__(self, session_id)
+    CairisDAO.__init__(self, session_id, 'obstacle')
 
-  def get_obstacles(self, constraint_id=-1, simplify=True):
+  def get_objects(self, constraint_id=-1, simplify=True):
     try:
       obstacles = self.db_proxy.getObstacles(constraint_id)
     except DatabaseProxyException as ex:
@@ -51,7 +51,7 @@ class ObstacleDAO(CairisDAO):
 
     return obstacles
 
-  def get_obstacles_summary(self):
+  def get_objects_summary(self):
     try:
       obs = self.db_proxy.getObstaclesSummary()
     except DatabaseProxyException as ex:
@@ -59,10 +59,10 @@ class ObstacleDAO(CairisDAO):
       raise ARMHTTPError(ex)
     return obs
 
-  def get_obstacle_by_name(self, name, simplify=True):
+  def get_object_by_name(self, name, simplify=True):
     obsId = self.db_proxy.getDimensionId(name,'obstacle')
     found_obstacle = None
-    obstacles = self.get_obstacles(obsId,simplify=False)
+    obstacles = self.get_objects(obsId,simplify=False)
 
     if obstacles is not None:
       found_obstacle = obstacles.get(name)
@@ -76,7 +76,7 @@ class ObstacleDAO(CairisDAO):
 
     return found_obstacle
 
-  def add_obstacle(self, obstacle):
+  def add_object(self, obstacle):
     obsParams = ObstacleParameters(obsName=obstacle.theName,obsOrig=obstacle.theOriginator,tags=obstacle.theTags,properties=obstacle.theEnvironmentProperties)
 
     if not self.check_existing_obstacle(obstacle.theName):
@@ -87,8 +87,8 @@ class ObstacleDAO(CairisDAO):
 
     return obstacle_id
 
-  def update_obstacle(self, obstacle, name):
-    old_obstacle = self.get_obstacle_by_name(name, simplify=False)
+  def update_object(self, obstacle, name):
+    old_obstacle = self.get_object_by_name(name, simplify=False)
     id = old_obstacle.theId
     params = ObstacleParameters(obsName=obstacle.theName,obsOrig=obstacle.theOriginator,tags=obstacle.theTags,properties=obstacle.theEnvironmentProperties)
     params.setId(id)
@@ -99,7 +99,7 @@ class ObstacleDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def delete_obstacle(self, name):
+  def delete_object(self, name):
     try:
       obsId = self.db_proxy.getDimensionId(name,'obstacle')
       self.db_proxy.deleteObstacle(obsId)
@@ -120,8 +120,10 @@ class ObstacleDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def get_obstacle_model(self, environment_name, obstacle_name):
+  def get_obstacle_model(self, environment_name, obstacle_name, pathValues = []):
     fontName, fontSize, apFontName = get_fonts(session_id=self.session_id)
+    if obstacle_name == 'all':  
+      obstacle_name = ''
 
     try:
       obstacle_filter = 0
@@ -271,27 +273,18 @@ class ObstacleDAO(CairisDAO):
         new_props.append(real_prop)
     elif fake_props is not None:
       for fake_prop in fake_props:
-        check_required_keys(fake_prop, ObstacleEnvironmentPropertiesModel.required)
-
-        new_goal_refinements = []
-        for gr in fake_prop['theGoalRefinements']:
-          new_goal_refinements.append((gr['theEndName'],gr['theEndType'],gr['theRefType'],gr['isAlternate'],gr['theRationale']))
-
-        new_subgoal_refinements = []
-        for sgr in fake_prop['theSubGoalRefinements']:
-          new_subgoal_refinements.append((sgr['theEndName'],sgr['theEndType'],sgr['theRefType'],sgr['isAlternate'],sgr['theRationale']))
-
-        new_prop = ObstacleEnvironmentProperties(
-                   environmentName=fake_prop['theEnvironmentName'],
-                   lbl='',
-                   definition=fake_prop['theDefinition'],
-                   category=fake_prop['theCategory'],
-                   gRefs=new_goal_refinements,
-                   sgRefs=new_subgoal_refinements,
-                   concs=fake_prop['theConcerns'])
-        new_prop.theProbability = fake_prop['theProbability']
-        new_prop.theProbabilityRationale = fake_prop['theProbabilityRationale']
-        new_props.append(new_prop)
+        if fake_prop is not None:
+          check_required_keys(fake_prop, ObstacleEnvironmentPropertiesModel.required)
+          new_goal_refinements = []
+          for gr in fake_prop['theGoalRefinements']:
+            new_goal_refinements.append((gr['theEndName'],gr['theEndType'],gr['theRefType'],gr['isAlternate'],gr['theRationale']))
+          new_subgoal_refinements = []
+          for sgr in fake_prop['theSubGoalRefinements']:
+            new_subgoal_refinements.append((sgr['theEndName'],sgr['theEndType'],sgr['theRefType'],sgr['isAlternate'],sgr['theRationale']))
+          new_prop = ObstacleEnvironmentProperties(environmentName=fake_prop['theEnvironmentName'],lbl='',definition=fake_prop['theDefinition'],category=fake_prop['theCategory'],gRefs=new_goal_refinements,sgRefs=new_subgoal_refinements,concs=fake_prop['theConcerns'])
+          new_prop.theProbability = fake_prop['theProbability']
+          new_prop.theProbabilityRationale = fake_prop['theProbabilityRationale']
+          new_props.append(new_prop)
     else:
       self.close()
       raise MissingParameterHTTPError(param_names=['real_props', 'fake_props'])
@@ -322,31 +315,13 @@ class ObstacleDAO(CairisDAO):
       return new_json_obstacle
 
   def simplify(self, obstacle):
-    """
-    Simplifies the Obstacle object by removing the environment properties
-    :param obstacle: The Obstacle to simplify
-    :type obstacle: Obstacle
-    :return: The simplified Obstacle
-    :rtype: Obstacle
-    """
     obstacle.theEnvironmentProperties = self.convert_properties(real_props=obstacle.theEnvironmentProperties)
     assert isinstance(obstacle, Obstacle)
     del obstacle.theId
     del obstacle.theEnvironmentDictionary
     return obstacle
 
-  def get_obstacle_names(self, environment=''):
-    try:
-      obstacle_names = self.db_proxy.getDimensionNames('obstacle', environment)
-      return obstacle_names
-    except DatabaseProxyException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-    except ARMException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-
-  def generate_vulnerability(self, name):
+  def generate_vulnerability(self, name, pathValues = []):
     obs = self.db_proxy.dimensionObject(name,'obstacle')
     vps = []
     gaps = []

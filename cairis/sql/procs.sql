@@ -897,12 +897,16 @@ drop procedure if exists persona_characteristic_synopsisNames;
 drop procedure if exists removeUseCaseContributions;
 drop procedure if exists addDataFlow;
 drop procedure if exists updateDataFlow;
+drop function if exists dataFlowId;
 drop procedure if exists addDataFlowAsset;
+drop procedure if exists addDataFlowObstacle;
 drop procedure if exists deleteDataFlowAssets;
+drop procedure if exists deleteDataFlowObstacles;
 drop procedure if exists delete_dataflow;
 drop procedure if exists deleteDataFlow;
 drop procedure if exists getDataFlows;
 drop procedure if exists getDataFlowAssets;
+drop procedure if exists getDataFlowObstacles;
 drop procedure if exists dataflowsToXml;
 drop procedure if exists dataflowsToJSON;
 drop procedure if exists dataFlowDiagram;
@@ -1017,6 +1021,18 @@ drop procedure if exists addUserSystemGoalLink;
 drop procedure if exists userGoalSystemGoals;
 drop procedure if exists deniedUserGoalDependencies;
 drop procedure if exists isGoalDenied;
+drop procedure if exists flows;
+drop procedure if exists taintFlowAnalysis;
+drop procedure if exists checkPreProcessTaint;
+drop procedure if exists checkPostProcessTaint;
+drop procedure if exists analyseTaintFlows;
+drop procedure if exists controlStructure;
+drop procedure if exists controlNames;
+drop procedure if exists addDataFlowTag;
+drop procedure if exists getDataFlowTags;
+drop procedure if exists deleteDataFlowTags;
+drop function if exists strSplit;
+drop procedure if exists addTaintFlows;
 
 
 delimiter //
@@ -2775,8 +2791,11 @@ end
 
 create procedure riskEnvironments(in threatName text, in vulName text)
 begin
-  select c.name from threat t,environment_threat ct, environment c where t.name = threatName and t.id = ct.threat_id and ct.environment_id = c.id and c.name in
-  (select c.name from vulnerability v,environment_vulnerability cv, environment c where v.name = vulName and v.id = cv.vulnerability_id and cv.environment_id = c.id);
+  declare threatId int;
+  declare vulId int;
+  select id into threatId from threat where name = threatName limit 1;
+  select id into vulId from vulnerability where name = vulName limit 1;
+  select e.name from environment e, environment_threat et, environment_vulnerability ev where et.threat_id = threatId and et.environment_id = ev.environment_id and ev.vulnerability_id = vulId and et.environment_id = e.id order by 1;
 end
 //
 
@@ -3659,6 +3678,7 @@ begin
   delete from requirement_task where task_id = tId;
   delete from task_asset where task_id = tId;
   delete from task_vulnerability where task_id = tId;
+  delete from usecase_task where task_id = tId;
   delete from countermeasuretask_goalassociation where subgoal_id= tId;
   delete from countermeasure_task_persona where task_id = tId;
   delete from goaltask_goalassociation where subgoal_id = tId;
@@ -3705,6 +3725,7 @@ begin
   delete from goalusecase_goalassociation where subgoal_id = ucId;
   delete from requirement_usecase where usecase_id = ucId;
   delete from obstacleusecase_goalassociation where subgoal_id = ucId;
+  delete from usecase_task where usecase_id = ucId;
   delete from usecase_reference where usecase_id = ucId;
   delete from component_usecase where usecase_id = ucId;
   delete from usecase_tag where usecase_id = ucId;
@@ -5353,7 +5374,11 @@ begin
   union
   select 'requirement' from_objt, fr.name from_name, 'requirement' to_objt, tr.name to_name,rr.label from requirement fr, environment_requirement fer, environment fe, requirement tr, asset_requirement tar, asset ta, environment_asset tae, requirement_requirement rr where rr.from_id = fr.id and fr.id = fer.requirement_id and fer.environment_id = fe.id and fr.version = (select max(i.version) from requirement i where i.id = fr.id) and rr.to_id = tr.id and tr.id = tar.requirement_id and tar.asset_id = ta.id and tr.version = (select max(i.version) from requirement i where i.id = tr.id) and fer.environment_id = environmentId and fer.environment_id = tae.environment_id and tae.asset_id = tar.asset_id
   union
-  select 'requirement' from_objt, fr.name from_name, 'requirement' to_objt, tr.name to_name,rr.label from requirement fr, environment_requirement fer, environment fe, requirement tr, environment_requirement ter, environment te, requirement_requirement rr where rr.from_id = fr.id and fr.id = fer.requirement_id and fer.environment_id = fe.id and fr.version = (select max(i.version) from requirement i where i.id = fr.id) and rr.to_id = tr.id and tr.id = ter.requirement_id and ter.environment_id = te.id and tr.version = (select max(i.version) from requirement i where i.id = tr.id) and fer.environment_id = environmentId and fer.environment_id = ter.environment_id;
+  select 'requirement' from_objt, fr.name from_name, 'requirement' to_objt, tr.name to_name,rr.label from requirement fr, environment_requirement fer, environment fe, requirement tr, environment_requirement ter, environment te, requirement_requirement rr where rr.from_id = fr.id and fr.id = fer.requirement_id and fer.environment_id = fe.id and fr.version = (select max(i.version) from requirement i where i.id = fr.id) and rr.to_id = tr.id and tr.id = ter.requirement_id and ter.environment_id = te.id and tr.version = (select max(i.version) from requirement i where i.id = tr.id) and fer.environment_id = environmentId and fer.environment_id = ter.environment_id
+  union
+  select 'document_reference' from_objt, dr.name from_name, 'vulnerability' to_objt, v.name to_name, 'supports' label from document_reference_vulnerability drv, environment_vulnerability ev, vulnerability v, document_reference dr where ev.environment_id = environmentId and ev.vulnerability_id = drv.vulnerability_id and drv.document_reference_id = dr.id and ev.vulnerability_id = v.id
+  union
+  select 'document_reference' from_objt, dr.name from_name, 'obstacle' to_objt, o.name to_name, 'supports' label from document_reference_obstacle dro, environment_obstacle eo, obstacle o, document_reference dr where eo.environment_id = environmentId and eo.obstacle_id = dro.obstacle_id and dro.document_reference_id = dr.id and eo.obstacle_id = o.id;
 end
 //
 
@@ -5486,7 +5511,11 @@ begin
     union
     select 'risk' from_objt, r.name from_name, 'vulnerability' to_objt, v.name to_name from risk r, vulnerability v, environment_risk er, environment_vulnerability ev, risk_vulnerability rv where er.environment_id = environmentId and er.id = rv.risk_id and rv.risk_id = r.id and ev.environment_id = environmentId and ev.vulnerability_id = rv.vulnerability_id and rv.vulnerability_id = v.id
     union
-    select 'risk' from_objt, r.name from_name, 'threat' to_objt, t.name to_name from risk_threat rt, environment_risk er, environment_threat et, risk r, threat t where er.environment_id = environmentId and et.environment_id = environmentId and er.id = rt.risk_id and rt.risk_id = r.id and et.threat_id = rt.threat_id and rt.threat_id = t.id;
+    select 'risk' from_objt, r.name from_name, 'threat' to_objt, t.name to_name from risk_threat rt, environment_risk er, environment_threat et, risk r, threat t where er.environment_id = environmentId and et.environment_id = environmentId and er.id = rt.risk_id and rt.risk_id = r.id and et.threat_id = rt.threat_id and rt.threat_id = t.id
+    union
+    select 'document_reference' from_objt,dr.name from_name,'vulnerability' to_objt, v.name to_name from document_reference_vulnerability drv, document_reference dr, environment_vulnerability ev, vulnerability v where ev.environment_id = environmentId and ev.vulnerability_id = v.id and ev.vulnerability_id = drv.vulnerability_id and drv.document_reference_id = dr.id
+    union
+    select 'document_reference' from_objt,dr.name from_name,'obstacle' to_objt, o.name to_name from document_reference_obstacle dro, document_reference dr, environment_obstacle eo, obstacle o where eo.environment_id = environmentId and eo.obstacle_id = o.id and eo.obstacle_id = dro.obstacle_id and dro.document_reference_id = dr.id;
   else
     select 'asset' from_objt,a.name from_name, 'threat' to_objt,t.name to_name from asset_threat at,asset a, threat t where at.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and at.asset_id = a.id and at.threat_id = t.id
     union
@@ -5558,7 +5587,11 @@ begin
     union
     select 'risk' from_objt, r.name from_name, 'vulnerability' to_objt, v.name to_name from risk r, vulnerability v, environment_risk er, environment_vulnerability ev, risk_vulnerability rv where er.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and er.id = rv.risk_id and rv.risk_id = r.id and ev.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and ev.vulnerability_id = rv.vulnerability_id and rv.vulnerability_id = v.id
     union
-    select 'risk' from_objt, r.name from_name, 'threat' to_objt, t.name to_name from risk_threat rt, environment_risk er, environment_threat et, risk r, threat t where er.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and et.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and et.id = rt.risk_id and rt.risk_id = r.id and et.threat_id = rt.threat_id and rt.threat_id = t.id;
+    select 'risk' from_objt, r.name from_name, 'threat' to_objt, t.name to_name from risk_threat rt, environment_risk er, environment_threat et, risk r, threat t where er.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and et.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and et.id = rt.risk_id and rt.risk_id = r.id and et.threat_id = rt.threat_id and rt.threat_id = t.id
+    union
+    select 'document_reference' from_objt,dr.name from_name,'vulnerability' to_objt, v.name to_name from document_reference_vulnerability drv, document_reference dr, environment_vulnerability ev, vulnerability v where ev.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and ev.vulnerability_id = v.id and ev.vulnerability_id = drv.vulnerability_id and drv.document_reference_id = dr.id
+    union
+    select 'document_reference' from_objt,dr.name from_name,'obstacle' to_objt, o.name to_name from document_reference_obstacle dro, document_reference dr, environment_obstacle eo, obstacle o where eo.environment_id in (select environment_id from composite_environment where composite_environment_id = environmentId) and eo.obstacle_id = o.id and eo.obstacle_id = dro.obstacle_id and dro.document_reference_id = dr.id;
   end if;
 end
 //
@@ -8628,6 +8661,7 @@ end
 create procedure delete_obstacle(in obsId int)
 begin
   call deleteObstacleComponents(obsId);
+  delete from dataflow_obstacle where obstacle_id = obsId;
   delete from obstacle_reference where obstacle_id = obsId;
   delete from obstacle_tag where obstacle_id = obsId;
   delete from obstacle where id = obsId;
@@ -11070,7 +11104,7 @@ begin
   declare nameVar varchar(11) default 'name';
   declare ncSql varchar(4000);
 
-  if dimName = 'persona_characteristic'
+  if dimName = 'persona_characteristic' or dimName = 'task_characteristic'
   then
     set nameVar = 'description';
   end if;
@@ -12717,8 +12751,9 @@ begin
     union
     select 'risk' from_objt, r2.name from_name, 'vulnerability' to_objt, v.name to_name from risk r, vulnerability v, risk_vulnerability rv, risk r2, environment_risk er, environment_vulnerability ev where r.id = riskId and r.vulnerability_id = ev.vulnerability_id and ev.environment_id = environmentId and ev.vulnerability_id = v.id and ev.vulnerability_id and ev.environment_id = er.environment_id and er.id = r2.id and r2.id = rv.risk_id and rv.vulnerability_id = v.id
     union
-    select 'risk' from_objt, r2.name from_name, 'threat' to_objt, t.name to_name from risk r, threat t, risk_threat rt, risk r2, environment_risk er, environment_threat et where r.id = riskId and r.threat_id = et.threat_id and et.environment_id = environmentId and et.threat_id = t.id and et.threat_id and et.environment_id = er.environment_id and er.id = r2.id and r2.id = rt.risk_id and rt.threat_id = t.id;
-
+    select 'risk' from_objt, r2.name from_name, 'threat' to_objt, t.name to_name from risk r, threat t, risk_threat rt, risk r2, environment_risk er, environment_threat et where r.id = riskId and r.threat_id = et.threat_id and et.environment_id = environmentId and et.threat_id = t.id and et.threat_id and et.environment_id = er.environment_id and er.id = r2.id and r2.id = rt.risk_id and rt.threat_id = t.id
+    union
+    select 'document_reference' from_objt, dr.name from_name, 'vulnerability' to_objt, v.name to_name from document_reference dr, document_reference_vulnerability drv, environment_vulnerability ev, vulnerability v, risk r where ev.environment_id = environmentId and ev.vulnerability_id = drv.vulnerability_id and drv.vulnerability_id = v.id and drv.document_reference_id = dr.id and v.id = r.vulnerability_id and r.id = riskId;
   else
     select 0;
   end if;
@@ -14527,7 +14562,12 @@ begin
     union
     select 'response', r.name, 'goal', g.name, '' from response_goal rg, response r, goal g where rg.response_id = r.id and rg.goal_id = g.id
     union
-    select 'requirement', fr.name, 'requirement', tr.name, rr.label from requirement_requirement rr, requirement fr, requirement tr where rr.from_id = fr.id and rr.to_id = tr.id;
+    select 'requirement', fr.name, 'requirement', tr.name, rr.label from requirement_requirement rr, requirement fr, requirement tr where rr.from_id = fr.id and rr.to_id = tr.id
+    union
+    select 'document_reference', dr.name, 'vulnerability', v.name, '' from document_reference_vulnerability drv, document_reference dr, vulnerability v where drv.document_reference_id = dr.id and drv.vulnerability_id = v.id
+    union
+    select 'document_reference', dr.name, 'obstacle', o.name, '' from document_reference_obstacle dro, document_reference dr, obstacle o where dro.document_reference_id = dr.id and dro.obstacle_id = o.id;
+
 
   declare goalAssocCursor cursor for
     select e.name,hg.name,'goal',rt.name,tg.name,'goal',ga.alternative_id,ga.rationale from goalgoal_goalassociation ga, environment e, goal hg, reference_type rt, goal tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
@@ -18983,6 +19023,8 @@ begin
   delete from vulnerability_tag where tag_id = tagId;
   delete from threat_tag where tag_id = tagId;
   delete from risk_tag where tag_id = tagId;
+  delete from dataflow_tag where tag_id = tagId;
+  delete from trust_boundary_tag where tag_id = tagId;
   delete from tag where id = tagId;
 end
 //
@@ -24186,17 +24228,19 @@ begin
 end
 //
 
-create procedure addDataFlow(in dfName text, in envName text, in fromName text, in fromType text, in toName text, in toType text)
+create procedure addDataFlow(in dfName text, in dfType text, in envName text, in fromName text, in fromType text, in toName text, in toType text)
 begin
   declare dfId int;
   declare envId int;
   declare fromId int;
   declare toId int;
+  declare typeId int;
 
   call newId2(dfId);
 
   select id into envId from environment where name = envName limit 1;
-  insert into dataflow(id,environment_id,name) values(dfId,envId,dfName);
+  select id into typeId from dataflow_type where name = dfType limit 1;
+  insert into dataflow(id,dataflow_type_id,environment_id,name) values(dfId,typeId,envId,dfName);
 
   if fromType = 'process' and toType = 'process'
   then
@@ -24229,20 +24273,22 @@ begin
 end
 //
 
-create procedure updateDataFlow(in oldDfName text, in newDfName text, in oldEnvName text, in newEnvName text, in fromName text, in fromType text, in toName text, in toType text)
+create procedure updateDataFlow(in oldDfName text, in newDfName text, in dfType text, in oldEnvName text, in newEnvName text, in fromName text, in fromType text, in toName text, in toType text)
 begin
   declare dfId int;
   declare oldEnvId int;
   declare envId int;
   declare fromId int;
   declare toId int;
+  declare typeId int;
 
   select id into oldEnvId from environment where name = oldEnvName limit 1;
   select id into envId from environment where name = newEnvName limit 1;
+  select id into typeId from dataflow_type where name = dfType limit 1;
 
   select id into dfId from dataflow where name = oldDfName and environment_id = oldEnvId limit 1;
 
-  update dataflow set environment_id = envId, name = newDfName where id = dfId;
+  update dataflow set environment_id = envId, name = newDfName, dataflow_type_id = typeId where id = dfId;
   delete from dataflow_process_process where dataflow_id = dfId;
   delete from dataflow_entity_process where dataflow_id = dfId;
   delete from dataflow_process_entity where dataflow_id = dfId;
@@ -24279,14 +24325,14 @@ begin
 end
 //
 
-create procedure addDataFlowAsset(in dfName text, in envName text, in fromType text, in fromName text, in toType text, in toName text, in assetName text)
+create function dataFlowId(dfName text, fromType text, fromName text, toType text, toName text, envName text)
+returns int
+deterministic
 begin
   declare dfId int;
   declare fromId int;
   declare toId int;
   declare envId int;
-  declare assetId int;
-  declare dfaCount int;
 
   select id into envId from environment where name = envName limit 1;
 
@@ -24294,29 +24340,39 @@ begin
   then
     select id into fromId from usecase where name = fromName limit 1;
     select id into toId from usecase where name = toName limit 1;
-    select dpp.dataflow_id into dfId from dataflow_process_process dpp, dataflow df where dpp.from_id = fromId and dpp.to_id = toId and dpp.dataflow_id = df.id and df.environment_id = envId limit 1;
+    select dpp.dataflow_id into dfId from dataflow_process_process dpp, dataflow df where dpp.from_id = fromId and dpp.to_id = toId and dpp.dataflow_id = df.id and df.environment_id = envId and df.name = dfName limit 1;
   elseif fromType = 'entity' and toType = 'process'
   then
     select id into fromId from asset where name = fromName limit 1;
     select id into toId from usecase where name = toName limit 1;
-    select dep.dataflow_id into dfId from dataflow_entity_process dep, dataflow df where dep.from_id = fromId and dep.to_id = toId and dep.dataflow_id = df.id and df.environment_id = envId limit 1;
+    select dep.dataflow_id into dfId from dataflow_entity_process dep, dataflow df where dep.from_id = fromId and dep.to_id = toId and dep.dataflow_id = df.id and df.environment_id = envId and df.name = dfName limit 1;
   elseif fromType = 'process' and toType = 'entity'
   then
     select id into fromId from usecase where name = fromName limit 1;
     select id into toId from asset where name = toName limit 1;
-    select dpe.dataflow_id into dfId from dataflow_process_entity dpe, dataflow df where dpe.from_id = fromId and dpe.to_id = toId and dpe.dataflow_id = df.id and df.environment_id = envId limit 1;
+    select dpe.dataflow_id into dfId from dataflow_process_entity dpe, dataflow df where dpe.from_id = fromId and dpe.to_id = toId and dpe.dataflow_id = df.id and df.environment_id = envId and df.name = dfName limit 1;
   elseif fromType = 'datastore' and toType = 'process'
   then
     select id into fromId from asset where name = fromName limit 1;
     select id into toId from usecase where name = toName limit 1;
-    select ddp.dataflow_id into dfId from dataflow_datastore_process ddp, dataflow df where ddp.from_id = fromId and ddp.to_id = toId and ddp.dataflow_id = df.id and df.environment_id = envId limit 1;
+    select ddp.dataflow_id into dfId from dataflow_datastore_process ddp, dataflow df where ddp.from_id = fromId and ddp.to_id = toId and ddp.dataflow_id = df.id and df.environment_id = envId and df.name = dfName limit 1;
   elseif fromType = 'process' and toType = 'datastore'
   then
     select id into fromId from usecase where name = fromName limit 1;
     select id into toId from asset where name = toName limit 1;
-    select dpd.dataflow_id into dfId from dataflow_process_datastore dpd, dataflow df where dpd.from_id = fromId and dpd.to_id = toId and dpd.dataflow_id = df.id and df.environment_id = envId limit 1;
+    select dpd.dataflow_id into dfId from dataflow_process_datastore dpd, dataflow df where dpd.from_id = fromId and dpd.to_id = toId and dpd.dataflow_id = df.id and df.environment_id = envId and df.name = dfName limit 1;
   end if; 
+  return dfId;
+end
+//
 
+create procedure addDataFlowAsset(in dfName text, in envName text, in fromType text, in fromName text, in toType text, in toName text, in assetName text)
+begin
+  declare dfId int;
+  declare assetId int;
+  declare dfaCount int;
+
+  select dataFlowId(dfName,fromType,fromName,toType,toName,envName) into dfId;
   select id into assetId from asset where name = assetName limit 1;
 
   select count(*) into dfaCount from dataflow_asset where dataflow_id = dfId and asset_id = assetId;
@@ -24326,6 +24382,27 @@ begin
   end if;
 end
 //
+
+create procedure addDataFlowObstacle(in dfName text, in envName text, in fromType text, in fromName text, in toType text, in toName text, in obsName text, in kwd text, in dfoContext text)
+begin
+  declare dfId int;
+  declare obsId int;
+  declare dfoCount int;
+  declare kwId int;
+
+  select dataFlowId(dfName,fromType,fromName,toType,toName,envName) into dfId;
+  select id into obsId from obstacle where name = obsName limit 1;
+  select id into kwId from stpa_keyword where name = kwd limit 1;
+
+  select count(*) into dfoCount from dataflow_obstacle where dataflow_id = dfId and obstacle_id = obsId;
+  if dfoCount = 0
+  then
+    insert into dataflow_obstacle(dataflow_id,obstacle_id,stpa_keyword_id,context) values (dfId,obsId,kwId,dfoContext);
+  end if;
+end
+//
+
+
 
 create procedure deleteDataFlowAssets(in dfName text, in envName text)
 begin
@@ -24338,14 +24415,27 @@ begin
 end
 //
 
+create procedure deleteDataFlowObstacles(in dfName text, in envName text)
+begin
+  declare dfId int;
+  declare envId int;
+
+  select id into envId from environment where name = envName limit 1;
+  select id into dfId from dataflow where name = dfName and environment_id = envId limit 1;
+  delete from dataflow_obstacle where dataflow_id = dfId;
+end
+//
+
 create procedure delete_dataflow(in dfId int)
 begin
   delete from dataflow_asset where dataflow_id = dfId;
+  delete from dataflow_obstacle where dataflow_id = dfId;
   delete from dataflow_process_process where dataflow_id = dfId;
   delete from dataflow_entity_process where dataflow_id = dfId;
   delete from dataflow_process_entity where dataflow_id = dfId;
   delete from dataflow_datastore_process where dataflow_id = dfId;
   delete from dataflow_process_datastore where dataflow_id = dfId;
+  delete from dataflow_tag where dataflow_id = dfId;
   delete from dataflow where id = dfId;
 end
 //
@@ -24370,9 +24460,9 @@ begin
   then
     select id into envId from environment where name = envName limit 1;
     select id into dfId from dataflow where name = dfName and environment_id = envId limit 1;
-    select dataflow, environment, from_name, from_type, to_name, to_type from dataflows where dataflow=dfName and environment = envName;
+    select dataflow, dataflow_type, environment, from_name, from_type, to_name, to_type from dataflows where dataflow=dfName and environment = envName;
   else
-    select dataflow, environment, from_name, from_type, to_name, to_type from dataflows;
+    select dataflow, dataflow_type, environment, from_name, from_type, to_name, to_type from dataflows;
   end if;
 end
 //
@@ -24384,40 +24474,58 @@ begin
 
   select id into envId from environment where name = envName limit 1;
   select id into dfId from dataflow where name = dfName and environment_id = envId limit 1;
-
   select a.name from dataflow_asset da, asset a where da.dataflow_id = dfId and da.asset_id = a.id order by 1;
-
 end
 //
+
+create procedure getDataFlowObstacles(in dfName text, in envName text)
+begin
+  declare dfId int;
+  declare envId int;
+
+  select id into envId from environment where name = envName limit 1;
+  select id into dfId from dataflow where name = dfName and environment_id = envId limit 1;
+  select o.name,sk.name,do.context from dataflow_obstacle do, obstacle o,stpa_keyword sk where do.dataflow_id = dfId and do.obstacle_id = o.id and do.stpa_keyword_id = sk.id order by 1;
+end
+// 
 
 create procedure dataflowsToXml(in includeHeader int)
 begin
   declare buf LONGTEXT default '<?xml version="1.0"?>\n<!DOCTYPE dataflows PUBLIC "-//CAIRIS//DTD DATAFLOW 1.0//EN" "http://cairis.org/dtd/dataflow.dtd">\n\n<dataflows>\n';
   declare done int default 0;
+  declare tagName varchar(255);
   declare dfName varchar(255);
+  declare dfType varchar(255);
   declare envName varchar (200);
   declare fromName varchar (200);
   declare fromType varchar (9);
   declare toName varchar (200);
   declare toType varchar (9);
   declare assetName varchar (200);
+  declare obsName varchar (200);
+  declare kwd varchar(255);
+  declare dfoContext varchar(4000);
   declare compName varchar (200);
   declare compType varchar (20);
   declare tbName varchar(50);
   declare tbDesc varchar(4000);
   declare dfId int;
   declare tbId int;
+  declare tbType varchar(255);
   declare envId int;
   declare dfCount int default 0;
   declare tbCount int default 0;
-  declare dfCursor cursor for select dataflow, environment, from_name, from_type, to_name, to_type from dataflows;
-  declare tbCursor cursor for select id,name,description from trust_boundary;
+  declare dfCursor cursor for select dataflow, dataflow_type, environment, from_name, from_type, to_name, to_type from dataflows;
+  declare dfTagCursor cursor for select t.name from dataflow_tag dt, tag t where dt.dataflow_id = dfId and dt.tag_id = t.id;
+  declare tbTagCursor cursor for select t.name from trust_boundary_tag tt, tag t where tt.trust_boundary_id = tbId and tt.tag_id = t.id;
+  declare tbCursor cursor for select tb.id,tb.name,tbt.name,tb.description from trust_boundary tb, trust_boundary_type tbt where tb.trust_boundary_type_id = tbt.id;
   declare tbEnvCursor cursor for select distinct environment_id from environment_trust_boundary where trust_boundary_id = tbId;
   declare tbCompCursor cursor for
     select uc.name,'process' from trust_boundary_usecase tbu, usecase uc where tbu.usecase_id = uc.id and trust_boundary_id = tbId and environment_id = envId
     union
     select a.name,'datastore' from trust_boundary_asset tba, asset a where tba.asset_id = a.id and trust_boundary_id = tbId and environment_id = envId;
   declare dfAssetCursor cursor for select a.name from asset a, dataflow_asset da where da.dataflow_id = dfId and da.asset_id = a.id;
+  declare dfObsCursor cursor for select o.name,sk.name,do.context from obstacle o, dataflow_obstacle do,stpa_keyword sk where do.dataflow_id = dfId and do.obstacle_id = o.id and do.stpa_keyword_id = sk.id order by 1;
   declare continue handler for not found set done = 1;
 
   if includeHeader = 0
@@ -24427,15 +24535,28 @@ begin
 
   open dfCursor;
   df_loop: loop
-    fetch dfCursor into dfName, envName, fromName, fromType, toName, toType;
+    fetch dfCursor into dfName, dfType, envName, fromName, fromType, toName, toType;
     if done = 1
     then
       leave df_loop;
     end if;
 
-    set buf = concat(buf,'  <dataflow name=\"',dfName,'\" environment=\"',envName,'\" from_name=\"',fromName,'\" from_type=\"',fromType,'\" to_name=\"',toName,'\" to_type=\"',toType,'\">\n');
+    set buf = concat(buf,'  <dataflow name=\"',dfName,'\" type=\"',dfType,'\" environment=\"',envName,'\" from_name=\"',fromName,'\" from_type=\"',fromType,'\" to_name=\"',toName,'\" to_type=\"',toType,'\">\n');
     select id into envId from environment where name = envName;
     select id into dfId from dataflow where name = dfName and environment_id = envId limit 1;
+
+    open dfTagCursor;
+    dfTag_loop: loop
+      fetch dfTagCursor into tagName;
+      if done = 1
+      then
+        leave dfTag_loop;
+      end if;
+      set buf = concat(buf,'  <tag name=\"',tagName,'\" />\n'); 
+    end loop dfTag_loop;
+    close dfTagCursor;
+    set done = 0;
+
 
     open dfAssetCursor;
     dfAsset_loop: loop
@@ -24449,6 +24570,18 @@ begin
     close dfAssetCursor;
     set done = 0;
 
+    open dfObsCursor;
+    dfObs_loop: loop
+      fetch dfObsCursor into obsName,kwd,dfoContext;
+      if done = 1
+      then 
+        leave dfObs_loop;
+      end if;
+      set buf = concat(buf,'    <dataflow_obstacle name=\"',obsName,'\" keyword=\"',kwd,'" >\n      <context>',dfoContext,'</context>\n    </dataflow_obstacle>\n');
+    end loop dfObs_loop;
+    close dfObsCursor;
+    set done = 0;
+
     set buf = concat(buf,'  </dataflow>\n');
     set dfCount = dfCount + 1;
   end loop df_loop;
@@ -24457,12 +24590,25 @@ begin
 
   open tbCursor;
   tb_loop: loop
-    fetch tbCursor into tbId, tbName, tbDesc;
+    fetch tbCursor into tbId, tbName, tbType, tbDesc;
     if done = 1
     then
       leave tb_loop;
     end if;
-    set buf = concat(buf,'  <trust_boundary name=\"',tbName,'\">\n    <description>',tbDesc,'</description>\n');
+    set buf = concat(buf,'  <trust_boundary name=\"',tbName,'\" type=\"',tbType,'" >\n    <description>',tbDesc,'</description>\n');
+
+    open tbTagCursor;
+    tbTag_loop: loop
+      fetch tbTagCursor into tagName;
+      if done = 1
+      then
+        leave tbTag_loop;
+      end if;
+      set buf = concat(buf,'    <tag name=\"',tagName,'\" />\n'); 
+    end loop tbTag_loop;
+    close tbTagCursor;
+
+    set done = 0;
     open tbEnvCursor;
     tbEnv_loop: loop
       fetch tbEnvCursor into envId;
@@ -24539,15 +24685,19 @@ begin
 end
 //
 
-create procedure addTrustBoundary(in tbId int, in tbName text, in tbDesc text)
+create procedure addTrustBoundary(in tbId int, in tbName text, in tbType text, in tbDesc text)
 begin
-  insert into trust_boundary(id,name,description) values (tbId,tbName,tbDesc);
+  declare tbTypeId int;
+  select id into tbTypeId from trust_boundary_type where name = tbType limit 1;
+  insert into trust_boundary(id,name,trust_boundary_type_id,description) values (tbId,tbName,tbTypeId,tbDesc);
 end
 //
 
-create procedure updateTrustBoundary(in tbId int, in tbName text, in tbDesc text)
+create procedure updateTrustBoundary(in tbId int, in tbName text, in tbType text, in tbDesc text)
 begin
-  update trust_boundary set name = tbName, description = tbDesc where id = tbId;
+  declare tbTypeId int;
+  select id into tbTypeId from trust_boundary_type where name = tbType limit 1;
+  update trust_boundary set name = tbName, trust_boundary_type_id = tbTypeId, description = tbDesc where id = tbId;
 end
 //
 
@@ -24555,9 +24705,9 @@ create procedure getTrustBoundaries(in constraintId int)
 begin
   if constraintId = -1
   then
-    select id,name,description from trust_boundary;
+    select tb.id,tb.name,tbt.name,tb.description from trust_boundary tb, trust_boundary_type tbt where tb.trust_boundary_type_id = tbt.id;
   else
-    select id,name,description from trust_boundary where id = constraintId;
+    select tb.id,tb.name,tbt.name,tb.description from trust_boundary tb, trust_boundary_type tbt where tb.id = constraintId and tb.trust_boundary_type_id = tbt.id;
   end if;
 end
 //
@@ -24581,6 +24731,7 @@ end
 create procedure delete_trust_boundary(in tbId int)
 begin
   call deleteTrustBoundaryComponents(tbId);
+  delete from trust_boundary_tag where trust_boundary_id = tbId;
   delete from trust_boundary where id = tbId;
 end
 //
@@ -25826,9 +25977,9 @@ begin
   declare aiCursor cursor for select ai.name,a.name from asset_instance ai, asset a where location_id = locId and ai.asset_id = a.id order by 1;
   declare piCursor cursor for select pi.name,p.name from persona_instance pi, persona p where location_id = locId and pi.persona_id = p.id order by 1;
   declare linkCursor cursor for 
-    select l.name from location l, location_link ll where ll.locations_id = locsId and ll.head_location_id != locId and ll.head_location_id = l.id
+    select l.name from location l, location_link ll where ll.locations_id = locsId and ll.head_location_id = locId and ll.tail_location_id = l.id
     union
-    select l.name from location l, location_link ll where ll.locations_id = locsId and ll.tail_location_id != locId and ll.tail_location_id = l.id;
+    select l.name from location l, location_link ll where ll.locations_id = locsId and ll.tail_location_id = locId and ll.head_location_id = l.id;
 
   declare continue handler for not found set done = 1;
 
@@ -29934,7 +30085,11 @@ begin
     union
     select 'response', r.name, 'goal', g.name, '' from response_goal rg, response r, goal g where rg.response_id = r.id and rg.goal_id = g.id
     union
-    select 'requirement', fr.name, 'requirement', tr.name, rr.label from requirement_requirement rr, requirement fr, requirement tr where rr.from_id = fr.id and rr.to_id = tr.id;
+    select 'requirement', fr.name, 'requirement', tr.name, rr.label from requirement_requirement rr, requirement fr, requirement tr where rr.from_id = fr.id and rr.to_id = tr.id
+    union
+    select 'document_reference', dr.name, 'vulnerability', v.name, '' from document_reference_vulnerability drv, document_reference dr, vulnerability v where drv.document_reference_id = dr.id and drv.vulnerability_id = v.id
+    union
+    select 'document_reference', dr.name, 'obstacle', o.name, '' from document_reference_obstacle dro, document_reference dr, obstacle o where dro.document_reference_id = dr.id and dro.obstacle_id = o.id;
 
   declare goalAssocCursor cursor for
     select e.name,hg.name,'goal',rt.name,tg.name,'goal',ga.alternative_id,ga.rationale from goalgoal_goalassociation ga, environment e, goal hg, reference_type rt, goal tg where ga.goal_id = hg.id and ga.ref_type_id = rt.id and ga.subgoal_id = tg.id and ga.environment_id = e.id
@@ -30257,29 +30412,35 @@ begin
   declare headElement int default 1;
   declare done int default 0;
   declare dfName varchar(255);
+  declare dfType varchar(255);
   declare envName varchar (200);
   declare fromName varchar (200);
   declare fromType varchar (9);
   declare toName varchar (200);
   declare toType varchar (9);
   declare assetName varchar (200);
+  declare obsName varchar(100);
+  declare kwd varchar(255);
+  declare dfoContext varchar(4000);
   declare compName varchar (200);
   declare compType varchar (20);
   declare tbName varchar(50);
+  declare tbType varchar(255);
   declare tbDesc varchar(4000);
   declare dfId int;
   declare tbId int;
   declare envId int;
   declare dfCount int default 0;
   declare tbCount int default 0;
-  declare dfCursor cursor for select dataflow, environment, from_name, from_type, to_name, to_type from dataflows;
-  declare tbCursor cursor for select id,name,description from trust_boundary;
+  declare dfCursor cursor for select dataflow, dataflow_type, environment, from_name, from_type, to_name, to_type from dataflows;
+  declare tbCursor cursor for select tb.id,tb.name,tbt.name,tb.description from trust_boundary tb, trust_boundary_type tbt where tb.trust_boundary_type_id = tbt.id;
   declare tbEnvCursor cursor for select distinct environment_id from environment_trust_boundary where trust_boundary_id = tbId;
   declare tbCompCursor cursor for
     select uc.name,'process' from trust_boundary_usecase tbu, usecase uc where tbu.usecase_id = uc.id and trust_boundary_id = tbId and environment_id = envId
     union
     select a.name,'datastore' from trust_boundary_asset tba, asset a where tba.asset_id = a.id and trust_boundary_id = tbId and environment_id = envId;
   declare dfAssetCursor cursor for select a.name from asset a, dataflow_asset da where da.dataflow_id = dfId and da.asset_id = a.id;
+  declare dfObsCursor cursor for select o.name,sk.name,do.context from obstacle o, dataflow_obstacle do where do.dataflow_id = dfId and do.obstacle_id = o.id and do.stpa_keyword_id = sk.id;
   declare continue handler for not found set done = 1;
 
   set headElement = 1;
@@ -30287,7 +30448,7 @@ begin
 
   open dfCursor;
   df_loop: loop
-    fetch dfCursor into dfName, envName, fromName, fromType, toName, toType;
+    fetch dfCursor into dfName, dfType, envName, fromName, fromType, toName, toType;
     if done = 1
     then
       set buf = concat(buf,"]\n\n");
@@ -30301,7 +30462,7 @@ begin
       end if;
     end if;
 
-    set buf = concat(buf,'  {"name" : "',dfName,'", "environment" : "',envName,'", "from_name" : "',fromName,'", "from_type" : "',fromType,'", "to_name" : "',toName,'", "to_type" : "',toType,'", "assets" : [');
+    set buf = concat(buf,'  {"name" : "',dfName,'", type : "',dfType,'", "environment" : "',envName,'", "from_name" : "',fromName,'", "from_type" : "',fromType,'", "to_name" : "',toName,'", "to_type" : "',toType,'", "assets" : [');
     select id into envId from environment where name = envName;
     select id into dfId from dataflow where name = dfName and environment_id = envId limit 1;
 
@@ -30324,6 +30485,27 @@ begin
     end loop dfAsset_loop;
     close dfAssetCursor;
     set done = 0;
+
+    open dfObsCursor;
+    dfObs_loop: loop
+      fetch dfObsCursor into obsName,kwd,dfoContext;
+      if done = 1
+      then 
+        set buf = concat(buf,']}');
+        leave dfObs_loop;
+      else
+        if headElement = 1
+        then
+          set headElement = 0;
+        else
+          set buf = concat(buf,",");
+        end if;
+      end if;
+      set buf = concat(buf,'("',obsName,'","',kwd,'","',dfoContext,'")');
+    end loop dfObs_loop;
+    close dfObsCursor;
+    set done = 0;
+
     set dfCount = dfCount + 1;
   end loop df_loop;
   close dfCursor;
@@ -30333,7 +30515,7 @@ begin
   set headElement = 1;
   open tbCursor;
   tb_loop: loop
-    fetch tbCursor into tbId, tbName, tbDesc;
+    fetch tbCursor into tbId, tbName, tbType, tbDesc;
     if done = 1
     then
       set buf = concat(buf,"]\n\n");
@@ -30346,7 +30528,7 @@ begin
         set buf = concat(buf,",\n");
       end if;
     end if;
-    set buf = concat(buf,'  {"name" : "',tbName,'", "description" : "',tbDesc,'", "environments" : [\n');
+    set buf = concat(buf,'  {"name" : "',tbName,'", "type" : "', tbType,'", "description" : "',tbDesc,'", "environments" : [\n');
     open tbEnvCursor;
     tbEnv_loop: loop
       fetch tbEnvCursor into envId;
@@ -30944,6 +31126,372 @@ begin
   close ugCursor;
 
 
+end
+//
+
+create procedure flows(in originId int, in nodeId int, in environmentId int, in prefix_ids longtext, in prefix_names longtext)
+begin
+  declare dfId int;
+  declare toId int;
+  declare isVisited int; 
+  declare newPrefix_ids longtext default '';
+  declare newPrefix_names longtext default '';
+  declare noFlows int default 1;
+  declare dfName varchar(255);
+  declare dfSql longtext;
+  declare done int default 0;
+  declare flowCursor cursor for 
+    select dep.dataflow_id,dep.to_id,d.name from dataflow_entity_process dep, dataflow d where dep.from_id = nodeId and dep.dataflow_id = d.id and d.environment_id = environmentId
+    union
+    select dpp.dataflow_id,dpp.to_id,d.name from dataflow_process_process dpp, dataflow d where dpp.from_id = nodeId and dpp.dataflow_id = d.id and d.environment_id = environmentId
+    union
+    select dpe.dataflow_id,dpe.to_id,d.name from dataflow_process_entity dpe, dataflow d where dpe.from_id = nodeId and dpe.dataflow_id = d.id and d.environment_id = environmentId
+    union
+    select dpd.dataflow_id,dpd.to_id,d.name from dataflow_process_datastore dpd, dataflow d where dpd.from_id = nodeId and dpd.dataflow_id = d.id and d.environment_id = environmentId
+    union
+    select ddp.dataflow_id,ddp.to_id,d.name from dataflow_datastore_process ddp, dataflow d where ddp.from_id = nodeId and ddp.dataflow_id = d.id and d.environment_id = environmentId;
+  declare continue handler for not found set done = 1;
+
+  insert into temp_visited(node_id) values(nodeId); 
+  set done = 0;
+  open flowCursor;
+  flow_loop: loop
+    fetch flowCursor into dfId,toId,dfName;
+    if done = 1
+    then
+      leave flow_loop;
+    end if;
+    set noFlows = 0;
+    set newPrefix_ids = prefix_ids;
+    set newPrefix_names = prefix_names;
+    if length(newPrefix_ids) > 0
+    then
+      set newPrefix_ids = concat(newPrefix_ids,',');
+      set newPrefix_names = concat(newPrefix_names,',');
+    end if;
+    set newPrefix_ids = concat(newPrefix_ids,dfId);
+    set newPrefix_names = concat(newPrefix_names,dfName);
+    
+    select count(*) into isVisited from temp_visited where node_id = toId;
+
+    if (isVisited > 0 )
+    then
+      call addTaintFlows(newPrefix_ids,originId,environmentId,newPrefix_names);
+/*      insert into temp_entitydataflow(origin_id,ids,names) values(originId,newPrefix_ids,newPrefix_names); SF: useful when debugging */
+    else
+      call flows(originId,toId,environmentId,newPrefix_ids,newPrefix_names);
+    end if;
+  end loop flow_loop;
+  close flowCursor;
+  
+  if noFlows = 1
+  then
+    if length(prefix_ids) > 0
+    then
+      call addTaintFlows(prefix_ids,originId,environmentId,prefix_names);
+/*      insert into temp_entitydataflow(origin_id,ids,names) values(originId,prefix_ids,prefix_names); SF: useful when debugging */
+    end if;
+  end if;
+end
+//
+
+create procedure taintFlowAnalysis(in envName text)
+begin
+  declare envId int;
+  declare entId int;
+  declare done int default 0;
+  declare entityCursor cursor for select distinct dep.from_id from dataflow_entity_process dep, dataflow d where dep.dataflow_id = d.id and d.environment_id = envId; 
+  declare continue handler for not found set done = 1;
+
+  drop table if exists temp_taintflow;
+  create temporary table temp_taintflow (dataflow_id int, environment_id int, entity longtext, df_sequence longtext);
+
+  select id into envId from environment where name = envName limit 1;
+/*
+  SF: Useful when debugging
+  drop table if exists temp_entitydataflow;
+  create temporary table temp_entitydataflow (origin_id int, ids longtext, names longtext);
+*/
+  drop table if exists temp_visited;
+  create temporary table temp_visited (node_id int);
+
+  open entityCursor;
+  entity_loop: loop
+    fetch entityCursor into entId;
+    if done = 1
+    then
+      leave entity_loop;
+    end if;
+    call flows(entId,entId,envId,'','');
+  end loop entity_loop;
+  close entityCursor;
+
+/*  select e.name,t.ids,t.names from temp_entitydataflow t, entity e where t.origin_id = e.id; SF: useful when debugging */
+
+  call analyseTaintFlows();
+
+end
+//
+
+create procedure checkPreProcessTaint(in dfId int, in envId int, in ucId int, in entName longtext, in dfSeq longtext)
+begin
+  declare done int default 0;
+  declare ucName varchar(200);
+  declare taskName varchar(200);
+  declare attackerName varchar(200);
+  declare isValidFlow int default 0;
+  declare tpCursor cursor for select t.name,a.name  from task t, task_persona tp, persona_role pr, attacker_role ar, attacker_motivation am, attacker_capability ac, usecase_task ut, motivation m, capability c, attacker a, usecase_role ur, task_asset ta where ut.usecase_id = ucId and ut.task_id = tp.task_id and tp.environment_id = envId and (tp.demands_id >= 2 or tp.goalsupport_id >= 2) and tp.task_id = t.id and tp.persona_id = pr.persona_id and tp.environment_id = pr.environment_id and pr.role_id = ar.role_id and pr.environment_id = ar.environment_id and ar.attacker_id = a.id and ar.attacker_id = am.attacker_id and ar.environment_id = am.environment_id and am.motivation_id = m.id and m.name in ('Productivity','Accident') and ar.attacker_id = ac.attacker_id and ar.environment_id = ac.environment_id and ac.capability_id = c.id and c.name like ('Resources/%') and ac.capability_value_id = 1 and ut.usecase_id = ur.usecase_id and ur.role_id = ar.role_id and tp.task_id = ta.task_id and tp.environment_id = ta.environment_id and ta.asset_id in (select asset_id from dataflow_asset where dataflow_id = dfId);
+  declare continue handler for not found set done = 1;
+
+  select count(*) into isValidFlow from dataflow_entity_process dep, dataflow d, asset a, asset_tag at, tag t, role r, usecase u, usecase_role ur where d.id = dfId and d.environment_id = envId and d.id = dep.dataflow_id and dep.from_id = a.id and a.id = at.asset_id and at.tag_id = t.id and substring(t.name,6) = r.name and r.id = ur.role_id and ur.usecase_id = dep.to_id;
+  if (isValidFlow > 0)
+  then
+    select name into ucName from usecase where id = ucId limit 1; 
+    set done = 0;
+    open tpCursor;
+    tp_loop: loop
+      fetch tpCursor into taskName, attackerName;
+      if done = 1
+      then
+        leave tp_loop;
+      end if;
+      insert into temp_vout(label,message) values ('Pre-process taint',concat('Process ',ucName,' in dataflow "',dfSeq,'" from entity ',entName,' may be tainted due to the potential involvement of attacker ',attackerName,' in task ',taskName,'.'));
+    end loop tp_loop;
+    close tpCursor;
+  end if;
+end
+//
+
+create procedure checkPostProcessTaint(in dfId int, in envId int, in ucId int, in entName longtext, in dfSeq longtext)
+begin
+  declare done int default 0;
+  declare ucName varchar(200);
+  declare obsId int;
+  declare isObstructed bool;
+  declare gaCursor cursor for select goga.subgoal_id from goalusecase_goalassociation guga, goalobstacle_goalassociation goga, obstacle_concern oc where guga.subgoal_id = ucId and guga.environment_id = envId and guga.goal_id = goga.goal_id and guga.environment_id = goga.environment_id and guga.subgoal_id and goga.subgoal_id = oc.obstacle_id and goga.environment_id = oc.environment_id and oc.asset_id in (select asset_id from dataflow_asset where dataflow_id = dfId);
+  declare continue handler for not found set done = 1;
+
+  select name into ucName from usecase where id = ucId limit 1; 
+  open gaCursor;
+  ga_loop: loop
+    fetch gaCursor into obsId;
+    if done = 1
+    then
+      leave ga_loop;
+    end if;
+    call isObstacleObstructed(obsId,envId,0,isObstructed);
+
+    if (isObstructed = true)
+    then
+      insert into temp_vout(label,message) values ('Post-process taint',concat('Data from process ',ucName,' in dataflow "',dfSeq,'" from entity ',entName,' may be tainted because exceptions are obstructed that concern information assets in the out-going dataflow.'));
+    end if;
+  end loop ga_loop;
+  close gaCursor;
+
+end
+//
+
+create procedure analyseTaintFlows()
+begin
+  declare done int default 0;
+  declare dfId int;
+  declare envId int;
+  declare entName longtext;
+  declare dfSeq longtext;
+  declare ucId int;
+  declare dfCursor cursor for select dataflow_id,environment_id,entity,df_sequence from temp_taintflow;
+  declare continue handler for not found set done = 1;
+
+  drop table if exists temp_vout;
+  create temporary table temp_vout (label varchar(200), message varchar(1000));
+
+  open dfCursor;
+  df_loop: loop
+    fetch dfCursor into dfId, envId,entName,dfSeq;
+    if done = 1
+    then
+      leave df_loop;
+    end if;
+
+    select dpp.to_id into ucId from dataflow_process_process dpp, dataflow d where dpp.dataflow_id = dfId and dpp.dataflow_id = d.id and d.environment_id = envId;
+    if (ucId is null)
+    then
+      select dep.to_id into ucId from dataflow_entity_process dep, dataflow d where dep.dataflow_id = dfId and dep.dataflow_id = d.id and d.environment_id = envId;
+      if (ucId is null)
+      then
+        select ddp.to_id into ucId from dataflow_datastore_process ddp, dataflow d where ddp.dataflow_id = dfId and ddp.dataflow_id = d.id and d.environment_id = envId;
+      end if;
+    end if;
+
+    if (ucId is not null)
+    then
+      call checkPreProcessTaint(dfId,envId,ucId,entName,dfSeq);
+    end if;
+    set done = 0;
+
+    set ucId = null;
+
+    select dpp.from_id into ucId from dataflow_process_process dpp, dataflow d where dpp.dataflow_id = dfId and dpp.dataflow_id = d.id and d.environment_id = envId;
+    if (ucId is null)
+    then
+      select dpe.from_id into ucId from dataflow_process_entity dpe, dataflow d where dpe.dataflow_id = dfId and dpe.dataflow_id = d.id and d.environment_id = envId;
+      if (ucId is null)
+      then
+        select dpd.from_id into ucId from dataflow_process_datastore dpd, dataflow d where dpd.dataflow_id = dfId and dpd.dataflow_id = d.id and d.environment_id = envId;
+      end if;
+    end if;
+
+    if (ucId is not null)
+    then
+      call checkPostProcessTaint(dfId,envId,ucId,entName,dfSeq);
+    end if;
+    set done = 0;
+    set ucId = null;
+
+  end loop df_loop;
+  close dfCursor;
+  
+  select distinct label,message from temp_vout;
+
+end
+//
+
+create procedure controlStructure(in envName text, in filterName text)
+begin
+  declare envId int;
+
+  select id into envId from environment where name = envName limit 1;
+
+  if filterName = ''
+  then
+    select d.name dataflow, fe.name from_name, 'entity' from_type, tb.name to_name, 'trust_boundary' to_type,dt.name df_type from dataflow d, dataflow_entity_process dep, asset fe, trust_boundary tb, trust_boundary_usecase tbu, dataflow_type dt where d.environment_id = envId and d.id = dep.dataflow_id and dep.from_id = fe.id and dep.to_id = tbu.usecase_id and d.environment_id = tbu.environment_id and tbu.trust_boundary_id = tb.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tb.name from_name, 'trust_boundary' from_type, te.name to_name, 'entity' to_type, dt.name df_type from dataflow d, dataflow_process_entity dpe, asset te, trust_boundary tb, trust_boundary_usecase tbu, dataflow_type dt where d.environment_id = envId and d.id = dpe.dataflow_id and dpe.from_id = tbu.usecase_id and d.environment_id = tbu.environment_id and tbu.trust_boundary_id = tb.id and dpe.to_id = te.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_process_process dpp, trust_boundary tbf, trust_boundary_usecase tbfu, trust_boundary tbt, trust_boundary_usecase tbtu, dataflow_type dt where d.environment_id = envId and d.id = dpp.dataflow_id and dpp.from_id = tbfu.usecase_id and tbfu.trust_boundary_id = tbf.id and dpp.to_id = tbtu.usecase_id and tbtu.trust_boundary_id = tbt.id and tbf.id != tbt.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_process_datastore dpd, trust_boundary tbf, trust_boundary_usecase tbfu, trust_boundary tbt, trust_boundary_asset tbta, dataflow_type dt where d.environment_id = envId and d.id = dpd.dataflow_id and dpd.from_id = tbfu.usecase_id and tbfu.trust_boundary_id = tbf.id and dpd.to_id = tbta.asset_id and tbta.trust_boundary_id = tbt.id and tbf.id != tbt.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_datastore_process ddp, trust_boundary tbf, trust_boundary_asset tbfa, trust_boundary tbt, trust_boundary_usecase tbtu, dataflow_type dt where d.environment_id = envId and d.id = ddp.dataflow_id and ddp.from_id = tbfa.asset_id and tbfa.trust_boundary_id = tbf.id and ddp.to_id = tbtu.usecase_id and tbtu.trust_boundary_id = tbt.id and tbf.id != tbt.id and d.dataflow_type_id = dt.id;
+  else
+    select d.name dataflow, fe.name from_name, 'entity' from_type, tb.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_entity_process dep, asset fe, trust_boundary tb, trust_boundary_usecase tbu, dataflow_type dt where d.environment_id = envId and d.id = dep.dataflow_id and dep.from_id = fe.id and dep.to_id = tbu.usecase_id and d.environment_id = tbu.environment_id and tbu.trust_boundary_id = tb.id and fe.name = filterName and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, fe.name from_name, 'entity' from_type, tb.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_entity_process dep, asset fe, trust_boundary tb, trust_boundary_usecase tbu, dataflow_type dt where d.environment_id = envId and d.id = dep.dataflow_id and dep.from_id = fe.id and dep.to_id = tbu.usecase_id and d.environment_id = tbu.environment_id and tbu.trust_boundary_id = tb.id and tb.name = filterName and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tb.name from_name, 'trust_boundary' from_type, te.name to_name, 'entity' to_type, dt.name df_type from dataflow d, dataflow_process_entity dpe, asset te, trust_boundary tb, trust_boundary_usecase tbu, dataflow_type dt where d.environment_id = envId and d.id = dpe.dataflow_id and dpe.from_id = tbu.usecase_id and d.environment_id = tbu.environment_id and tbu.trust_boundary_id = tb.id and dpe.to_id = te.id and tb.name = filterName and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tb.name from_name, 'trust_boundary' from_type, te.name to_name, 'entity' to_type, dt.name df_type from dataflow d, dataflow_process_entity dpe, asset te, trust_boundary tb, trust_boundary_usecase tbu, dataflow_type dt where d.environment_id = envId and d.id = dpe.dataflow_id and dpe.from_id = tbu.usecase_id and d.environment_id = tbu.environment_id and tbu.trust_boundary_id = tb.id and dpe.to_id = te.id and te.name = filterName and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_process_process dpp, trust_boundary tbf, trust_boundary_usecase tbfu, trust_boundary tbt, trust_boundary_usecase tbtu, dataflow_type dt where d.environment_id = envId and d.id = dpp.dataflow_id and dpp.from_id = tbfu.usecase_id and tbfu.trust_boundary_id = tbf.id and dpp.to_id = tbtu.usecase_id and tbtu.trust_boundary_id = tbt.id and tbf.name = filterName and tbf.id != tbt.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_process_process dpp, trust_boundary tbf, trust_boundary_usecase tbfu, trust_boundary tbt, trust_boundary_usecase tbtu, dataflow_type dt where d.environment_id = envId and d.id = dpp.dataflow_id and dpp.from_id = tbfu.usecase_id and tbfu.trust_boundary_id = tbf.id and dpp.to_id = tbtu.usecase_id and tbtu.trust_boundary_id = tbt.id and tbt.name = filterName and tbf.id != tbt.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_process_datastore dpd, trust_boundary tbf, trust_boundary_usecase tbfu, trust_boundary tbt, trust_boundary_asset tbta, dataflow_type dt where d.environment_id = envId and d.id = dpd.dataflow_id and dpd.from_id = tbfu.usecase_id and tbfu.trust_boundary_id = tbf.id and dpd.to_id = tbta.asset_id and tbta.trust_boundary_id = tbt.id and tbf.name = filterName and tbf.id != tbt.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_process_datastore dpd, trust_boundary tbf, trust_boundary_usecase tbfu, trust_boundary tbt, trust_boundary_asset tbta, dataflow_type dt where d.environment_id = envId and d.id = dpd.dataflow_id and dpd.from_id = tbfu.usecase_id and tbfu.trust_boundary_id = tbf.id and dpd.to_id = tbta.asset_id and tbta.trust_boundary_id = tbt.id and tbt.name = filterName and tbf.id != tbt.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_datastore_process ddp, trust_boundary tbf, trust_boundary_asset tbfa, trust_boundary tbt, trust_boundary_usecase tbtu, dataflow_type dt where d.environment_id = envId and d.id = ddp.dataflow_id and ddp.from_id = tbfa.asset_id and tbfa.trust_boundary_id = tbf.id and ddp.to_id = tbtu.usecase_id and tbtu.trust_boundary_id = tbt.id and tbf.name = filterName and tbf.id != tbt.id and d.dataflow_type_id = dt.id
+    union
+    select d.name dataflow, tbf.name from_name, 'trust_boundary' from_type, tbt.name to_name, 'trust_boundary' to_type, dt.name df_type from dataflow d, dataflow_datastore_process ddp, trust_boundary tbf, trust_boundary_asset tbfa, trust_boundary tbt, trust_boundary_usecase tbtu, dataflow_type dt where d.environment_id = envId and d.id = ddp.dataflow_id and ddp.from_id = tbfa.asset_id and tbfa.trust_boundary_id = tbf.id and ddp.to_id = tbtu.usecase_id and tbtu.trust_boundary_id = tbt.id and tbt.name = filterName and tbf.id != tbt.id and d.dataflow_type_id = dt.id;
+  end if;
+end
+//
+
+create procedure controlNames(in envName text)
+begin
+  declare envId int;
+
+  select id into envId from environment where name = envName;
+
+  select a.name from dataflow_entity_process dep, asset a, dataflow d where dep.dataflow_id = d.id and d.environment_id = envId and dep.from_id = a.id
+  union
+  select a.name from dataflow_process_entity dpe, asset a, dataflow d where dpe.dataflow_id = d.id and d.environment_id = envId and dpe.to_id = a.id
+  union
+  select tb.name from dataflow d, dataflow_process_process dpp, trust_boundary tb, trust_boundary_usecase tbu where d.environment_id = envId and d.id = dpp.dataflow_id and dpp.from_id = tbu.usecase_id and tbu.trust_boundary_id = tb.id
+  union
+  select tb.name from dataflow d, dataflow_process_process dpp, trust_boundary tb, trust_boundary_usecase tbu where d.environment_id = envId and d.id = dpp.dataflow_id and dpp.to_id = tbu.usecase_id and tbu.trust_boundary_id = tb.id
+  union
+  select tb.name from dataflow d, dataflow_process_datastore dpd, trust_boundary tb, trust_boundary_usecase tbu where d.environment_id = envId and d.id = dpd.dataflow_id and dpd.from_id = tbu.usecase_id and tbu.trust_boundary_id = tb.id
+  union
+  select tb.name from dataflow d, dataflow_process_datastore dpd, trust_boundary tb, trust_boundary_asset tba where d.environment_id = envId and d.id = dpd.dataflow_id and dpd.to_id = tba.asset_id and tba.trust_boundary_id = tb.id
+  union
+  select tb.name from dataflow d, dataflow_datastore_process ddp, trust_boundary tb, trust_boundary_asset tba where d.environment_id = envId and d.id = ddp.dataflow_id and ddp.from_id = tba.asset_id and tba.trust_boundary_id = tb.id
+  union
+  select tb.name from dataflow d, dataflow_datastore_process ddp, trust_boundary tb, trust_boundary_usecase tbu where d.environment_id = envId and d.id = ddp.dataflow_id and ddp.to_id = tbu.usecase_id and tbu.trust_boundary_id = tb.id order by 1;
+end
+//
+
+create procedure addDataFlowTag(in dfName text, in fromType text, in fromName text, in toType text, in toName text, in envName text, in tagName text)
+begin
+  declare dfId int;
+  declare tagId int;
+
+  select dataFlowId(dfName,fromType,fromName,toType,toName,envName) into dfId;
+
+  select id into tagId from tag where name = tagName limit 1;
+  if tagId is null
+  then
+    call newId2(tagId);
+    insert into tag (id,name) values (tagId,tagName);
+  end if;
+
+  insert into dataflow_tag(dataflow_id,tag_id) values (dfId,tagId);
+end
+//
+
+create procedure getDataFlowTags(in dfName text, in fromType text, in fromName text, in toType text, in toName text, in envName text)
+begin
+  declare dfId int;
+  select dataFlowId(dfName,fromType,fromName,toType,toName,envName) into dfId;
+  select t.name from dataflow_tag dt, tag t where dt.dataflow_id = dfId and dt.tag_id = t.id;
+end
+//
+
+create procedure deleteDataFlowTags(in dfName text, in fromType text, in fromName text, in toType text, in toName text, in envName text)
+begin
+  declare dfId int;
+
+  select dataFlowId(dfName,fromType,fromName,toType,toName,envName) into dfId;
+
+  if dfId is not null
+  then
+    delete from dataflow_tag where dataflow_id = dfId;
+  end if;
+end
+//
+
+create function strSplit(x longtext, pos integer) 
+returns longtext
+begin
+  declare output longtext;
+  set output = replace(substring(substring_index(x, ',', pos)
+                 , length(substring_index(x, ',', pos - 1)) + 1)
+                 , ','
+                 , '');
+  if output = '' 
+  then 
+    set output = null; 
+  end if;
+  return output;
+end
+//
+
+create procedure addTaintFlows(in csvDfs longtext, in originId int, in environmentId int, in dfSeq longtext)
+begin
+  declare csvIdx int default 1;
+  declare dfId int default -1;
+  declare entityName varchar(100);
+
+  select name into entityName from entity where id = originId;
+
+  repeat
+    select strSplit(csvDfs,csvIdx) into dfId;
+    if dfId is not null
+    then
+      insert into temp_taintflow(dataflow_id,environment_id,entity,df_sequence) values(dfId,environmentId,entityName,dfSeq);
+      set csvIdx = csvIdx + 1;
+    end if;
+  until dfId is null end repeat;
 end
 //
 

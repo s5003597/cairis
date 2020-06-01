@@ -30,7 +30,7 @@ class Obstacle(ObjectValidator.ObjectValidator):
     self.theOriginator = obsOrig
     self.theEnvironmentProperties = environmentProperties
     self.theEnvironmentDictionary = {}
-    for p in self.theEnvironmentProperties:
+    for p in environmentProperties:
       environmentName = p.name()
       self.theEnvironmentDictionary[environmentName] = p
 

@@ -20,6 +20,7 @@
 drop function if exists internalDocumentQuotationString;
 drop function if exists personaQuotationString;
 
+DROP VIEW IF EXISTS value_type;
 DROP VIEW IF EXISTS object_name;
 DROP VIEW IF EXISTS entity;
 DROP VIEW IF EXISTS datastore;
@@ -67,14 +68,20 @@ DROP TABLE IF EXISTS task_goal_contribution;
 DROP TABLE IF EXISTS trust_boundary_usecase;
 DROP TABLE IF EXISTS trust_boundary_asset;
 DROP TABLE IF EXISTS trust_boundary_privilege;
+DROP TABLE IF EXISTS trust_boundary_tag;
 DROP TABLE IF EXISTS trust_boundary;
+DROP TABLE IF EXISTS trust_boundary_type;
 DROP TABLE IF EXISTS dataflow_process_process;
 DROP TABLE IF EXISTS dataflow_entity_process;
 DROP TABLE IF EXISTS dataflow_process_entity;
 DROP TABLE IF EXISTS dataflow_process_datastore;
 DROP TABLE IF EXISTS dataflow_datastore_process;
 DROP TABLE IF EXISTS dataflow_asset;
+DROP TABLE IF EXISTS dataflow_obstacle;
+DROP TABLE IF EXISTS stpa_keyword;
+DROP TABLE IF EXISTS dataflow_tag;
 DROP TABLE IF EXISTS dataflow;
+DROP TABLE IF EXISTS dataflow_type;
 DROP TABLE IF EXISTS persona_instance;
 DROP TABLE IF EXISTS asset_instance;
 DROP TABLE IF EXISTS location_link;
@@ -128,6 +135,8 @@ DROP TABLE IF EXISTS component_template_goal;
 DROP TABLE IF EXISTS component_vulnerability_target;
 DROP TABLE IF EXISTS component_threat_target;
 
+DROP TABLE IF EXISTS document_reference_vulnerability;
+DROP TABLE IF EXISTS document_reference_obstacle;
 DROP TABLE IF EXISTS ice_ic_contribution;
 DROP TABLE IF EXISTS implied_characteristic_element_intention;
 DROP TABLE IF EXISTS implied_characteristic_element;
@@ -2633,6 +2642,7 @@ CREATE TABLE response_tag (
   FOREIGN KEY(tag_id) REFERENCES tag(id)
 ) ENGINE=INNODB;
 
+
 CREATE TABLE contribution_end (
   id INT NOT NULL,
   name VARCHAR(100) NOT NULL,
@@ -3311,12 +3321,21 @@ CREATE TABLE persona_instance (
   FOREIGN KEY(location_id) REFERENCES location(id)
 ) ENGINE=INNODB;
 
+CREATE TABLE dataflow_type (
+  id INT NOT NULL,
+  name VARCHAR(255),
+  description VARCHAR(1000),
+  PRIMARY KEY(id)
+) ENGINE=INNODB;
+
 CREATE TABLE dataflow (
   id INT NOT NULL,
   environment_id INT NOT NULL,
+  dataflow_type_id INT NOT NULL,
   name VARCHAR(255),
   PRIMARY KEY(id,environment_id,name),
-  FOREIGN KEY(environment_id) REFERENCES environment(id)
+  FOREIGN KEY(environment_id) REFERENCES environment(id),
+  FOREIGN KEY(dataflow_type_id) REFERENCES dataflow_type(id)
 ) ENGINE=INNODB;
 
 CREATE TABLE dataflow_asset (
@@ -3324,6 +3343,31 @@ CREATE TABLE dataflow_asset (
   asset_id INT NOT NULL,
   PRIMARY KEY(dataflow_id,asset_id),
   FOREIGN KEY(asset_id) REFERENCES asset(id)
+) ENGINE=INNODB;
+
+CREATE TABLE stpa_keyword (
+  id INT NOT NULL,
+  name VARCHAR(255),
+  description VARCHAR(4000),
+  PRIMARY KEY(id)
+) ENGINE=INNODB;
+
+CREATE TABLE dataflow_obstacle (
+  dataflow_id INT NOT NULL,
+  obstacle_id INT NOT NULL,
+  stpa_keyword_id INT NOT NULL,
+  context VARCHAR(4000),
+  PRIMARY KEY(dataflow_id,obstacle_id),
+  FOREIGN KEY(obstacle_id) REFERENCES obstacle(id),
+  FOREIGN KEY(stpa_keyword_id) REFERENCES stpa_keyword(id)
+) ENGINE=INNODB;
+
+CREATE TABLE dataflow_tag (
+  dataflow_id INT NOT NULL,
+  tag_id INT NOT NULL,
+  PRIMARY KEY(dataflow_id,tag_id),
+  FOREIGN KEY(dataflow_id) REFERENCES dataflow(id), 
+  FOREIGN KEY(tag_id) REFERENCES tag(id)
 ) ENGINE=INNODB;
 
 CREATE TABLE dataflow_process_process (
@@ -3336,7 +3380,7 @@ CREATE TABLE dataflow_process_process (
   FOREIGN KEY(to_id) REFERENCES usecase(id)
 ) ENGINE=INNODB;
 
-create TABLE dataflow_entity_process (
+CREATE TABLE dataflow_entity_process (
   dataflow_id INT NOT NULL,
   from_id INT NOT NULL,
   to_id INT NOT NULL,
@@ -3346,7 +3390,7 @@ create TABLE dataflow_entity_process (
   FOREIGN KEY(to_id) REFERENCES usecase(id)
 ) ENGINE=INNODB;
 
-create TABLE dataflow_process_entity (
+CREATE TABLE dataflow_process_entity (
   dataflow_id INT NOT NULL,
   from_id INT NOT NULL,
   to_id INT NOT NULL,
@@ -3356,7 +3400,7 @@ create TABLE dataflow_process_entity (
   FOREIGN KEY(to_id) REFERENCES asset(id)
 ) ENGINE=INNODB;
 
-create TABLE dataflow_process_datastore (
+CREATE TABLE dataflow_process_datastore (
   dataflow_id INT NOT NULL,
   from_id INT NOT NULL,
   to_id INT NOT NULL,
@@ -3366,7 +3410,7 @@ create TABLE dataflow_process_datastore (
   FOREIGN KEY(to_id) REFERENCES asset(id)
 ) ENGINE=INNODB;
 
-create TABLE dataflow_datastore_process (
+CREATE TABLE dataflow_datastore_process (
   dataflow_id INT NOT NULL,
   from_id INT NOT NULL,
   to_id INT NOT NULL,
@@ -3376,14 +3420,23 @@ create TABLE dataflow_datastore_process (
   FOREIGN KEY(to_id) REFERENCES usecase(id)
 ) ENGINE=INNODB;
 
-create TABLE trust_boundary (
+CREATE TABLE trust_boundary_type (
   id INT NOT NULL,
-  name VARCHAR(50), 
-  description VARCHAR(4000), 
+  name VARCHAR(255),
+  description VARCHAR(4000),
   PRIMARY KEY(id)
 ) ENGINE=INNODB;
 
-create TABLE trust_boundary_usecase (
+CREATE TABLE trust_boundary (
+  id INT NOT NULL,
+  name VARCHAR(50), 
+  trust_boundary_type_id INT NOT NULL,
+  description VARCHAR(4000), 
+  PRIMARY KEY(id),
+  FOREIGN KEY(trust_boundary_type_id) REFERENCES trust_boundary_type(id)
+) ENGINE=INNODB;
+
+CREATE TABLE trust_boundary_usecase (
   trust_boundary_id INT NOT NULL,
   environment_id INT NOT NULL,
   usecase_id INT NOT NULL,
@@ -3393,7 +3446,7 @@ create TABLE trust_boundary_usecase (
   FOREIGN KEY(usecase_id) REFERENCES usecase(id)
 ) ENGINE=INNODB;
 
-create TABLE trust_boundary_asset (
+CREATE TABLE trust_boundary_asset (
   trust_boundary_id INT NOT NULL,
   environment_id INT NOT NULL,
   asset_id INT NOT NULL,
@@ -3403,13 +3456,21 @@ create TABLE trust_boundary_asset (
   FOREIGN KEY(asset_id) REFERENCES asset(id)
 ) ENGINE=INNODB;
 
-create TABLE trust_boundary_privilege (
+CREATE TABLE trust_boundary_privilege (
   trust_boundary_id INT NOT NULL,
   environment_id INT NOT NULL,
   privilege_value INT NOT NULL,
   PRIMARY KEY(trust_boundary_id,environment_id,privilege_value),
   FOREIGN KEY(trust_boundary_id) REFERENCES trust_boundary(id),
   FOREIGN KEY(environment_id) REFERENCES environment(id)
+) ENGINE=INNODB;
+
+CREATE TABLE trust_boundary_tag (
+  trust_boundary_id INT NOT NULL,
+  tag_id INT NOT NULL,
+  PRIMARY KEY(trust_boundary_id,tag_id),
+  FOREIGN KEY(trust_boundary_id) REFERENCES trust_boundary(id), 
+  FOREIGN KEY(tag_id) REFERENCES tag(id)
 ) ENGINE=INNODB;
 
 CREATE TABLE risk_vulnerability (
@@ -3445,6 +3506,21 @@ CREATE TABLE task_goal_contribution (
   FOREIGN KEY(environment_id) REFERENCES environment(id)
 ) ENGINE=INNODB;
   
+CREATE TABLE document_reference_vulnerability (
+  document_reference_id INT NOT NULL,
+  vulnerability_id INT NOT NULL,
+  PRIMARY KEY(document_reference_id,vulnerability_id),
+  FOREIGN KEY(document_reference_id) REFERENCES document_reference(id),
+  FOREIGN KEY(vulnerability_id) REFERENCES vulnerability(id)
+) ENGINE=INNODB; 
+
+CREATE TABLE document_reference_obstacle (
+  document_reference_id INT NOT NULL,
+  obstacle_id INT NOT NULL,
+  PRIMARY KEY(document_reference_id,obstacle_id),
+  FOREIGN KEY(document_reference_id) REFERENCES document_reference(id),
+  FOREIGN KEY(obstacle_id) REFERENCES obstacle(id)
+) ENGINE=INNODB; 
 
 delimiter //
 
@@ -3501,6 +3577,29 @@ end
 
 delimiter ; 
 
+CREATE VIEW value_type as
+  select id, name from asset_type
+  union
+  select id, name from access_right
+  union
+  select id, name from protocol
+  union
+  select id, name from privilege
+  union
+  select id, name from surface_type
+  union
+  select id, name from vulnerability_type
+  union
+  select id, name from severity
+  union
+  select id, name from capability
+  union
+  select id, name from motivation
+  union
+  select id, name from threat_type
+  union
+  select id, name from likelihood;
+
 CREATE VIEW object_name as
   select name from requirement
   union
@@ -3547,16 +3646,15 @@ CREATE VIEW datastore as
   select id,name,short_code,description,significance,asset_type_id,is_critical,critical_rationale from asset where asset_type_id = 0;
 
 CREATE VIEW dataflows as
-  select d.name dataflow, e.name environment,fp.name from_name,'process' from_type,tp.name to_name,'process' to_type from dataflow d, dataflow_process_process dpp, usecase fp, usecase tp, environment e where d.id = dpp.dataflow_id and d.environment_id = e.id and dpp.from_id = fp.id and dpp.to_id = tp.id
+  select d.name dataflow, dt.name dataflow_type, e.name environment,fp.name from_name,'process' from_type,tp.name to_name,'process' to_type from dataflow d, dataflow_process_process dpp, usecase fp, usecase tp, environment e, dataflow_type dt where d.id = dpp.dataflow_id and d.environment_id = e.id and dpp.from_id = fp.id and dpp.to_id = tp.id and d.dataflow_type_id = dt.id
   union
-  select d.name dataflow, e.name environment, fe.name from_name, 'entity' from_type, tp.name to_name, 'process' to_type from dataflow d, dataflow_entity_process dep, asset fe, usecase tp, environment e where d.id = dep.dataflow_id and d.environment_id = e.id and dep.from_id = fe.id and dep.to_id = tp.id
+  select d.name dataflow, dt.name dataflow_type, e.name environment, fe.name from_name, 'entity' from_type, tp.name to_name, 'process' to_type from dataflow d, dataflow_entity_process dep, asset fe, usecase tp, environment e, dataflow_type dt where d.id = dep.dataflow_id and d.environment_id = e.id and dep.from_id = fe.id and dep.to_id = tp.id and d.dataflow_type_id = dt.id
   union
-  select d.name dataflow, e.name environment, fp.name from_name, 'process' from_type, te.name to_name, 'entity' to_type from dataflow d, dataflow_process_entity dpe, usecase fp, asset te, environment e where d.id = dpe.dataflow_id and d.environment_id = e.id and dpe.from_id = fp.id and dpe.to_id = te.id
+  select d.name dataflow, dt.name dataflow_type, e.name environment, fp.name from_name, 'process' from_type, te.name to_name, 'entity' to_type from dataflow d, dataflow_process_entity dpe, usecase fp, asset te, environment e, dataflow_type dt where d.id = dpe.dataflow_id and d.environment_id = e.id and dpe.from_id = fp.id and dpe.to_id = te.id and d.dataflow_type_id = dt.id
   union
-  select d.name dataflow, e.name environment, fd.name from_name, 'datastore' from_type, tp.name to_name, 'process' to_type from dataflow d, dataflow_datastore_process ddp, asset fd, usecase tp, environment e where d.id = ddp.dataflow_id and d.environment_id = e.id and ddp.from_id = fd.id and ddp.to_id = tp.id
+  select d.name dataflow, dt.name dataflow_type, e.name environment, fd.name from_name, 'datastore' from_type, tp.name to_name, 'process' to_type from dataflow d, dataflow_datastore_process ddp, asset fd, usecase tp, environment e, dataflow_type dt where d.id = ddp.dataflow_id and d.environment_id = e.id and ddp.from_id = fd.id and ddp.to_id = tp.id and d.dataflow_type_id = dt.id
   union
-  select d.name dataflow, e.name environment, fp.name from_name, 'process' from_type, td.name to_name, 'datastore' to_type from dataflow d, dataflow_process_datastore dpd, usecase fp, asset td, environment e where d.id = dpd.dataflow_id and d.environment_id = e.id and dpd.from_id = fp.id and dpd.to_id = td.id;
-
+  select d.name dataflow, dt.name dataflow_type, e.name environment, fp.name from_name, 'process' from_type, td.name to_name, 'datastore' to_type from dataflow d, dataflow_process_datastore dpd, usecase fp, asset td, environment e, dataflow_type dt where d.id = dpd.dataflow_id and d.environment_id = e.id and dpd.from_id = fp.id and dpd.to_id = td.id and d.dataflow_type_id = dt.id;
 
 
 CREATE VIEW countermeasure_vulnerability_response_target as 
@@ -4140,7 +4238,7 @@ CREATE VIEW conceptMapModel_all as
 
 
 
-INSERT INTO version (major,minor,patch) VALUES (2,3,1);
+INSERT INTO version (major,minor,patch) VALUES (2,3,3);
 INSERT INTO attributes (id,name) VALUES (103,'did');
 INSERT INTO trace_dimension values (0,'requirement');
 INSERT INTO trace_dimension values (1,'persona');
@@ -4260,6 +4358,8 @@ INSERT INTO allowable_trace values(21,18);
 INSERT INTO allowable_trace values(16,2);
 INSERT INTO allowable_trace values(7,5);
 INSERT INTO allowable_trace values(7,6);
+INSERT INTO allowable_trace values(20,6);
+INSERT INTO allowable_trace values(20,17);
 INSERT INTO requirement_type values(0,'Functional');
 INSERT INTO requirement_type values(1,'Data');
 INSERT INTO requirement_type values(2,'Look and Feel');
@@ -4353,6 +4453,8 @@ INSERT INTO obstacle_category_type values(10,'Pseudonymity Threat');
 INSERT INTO obstacle_category_type values(11,'Unlinkability Threat');
 INSERT INTO obstacle_category_type values(12,'Unobservability Threat');
 INSERT INTO obstacle_category_type values(13,'Threat');
+INSERT INTO obstacle_category_type values(14,'Loss');
+INSERT INTO obstacle_category_type values(15,'Hazard');
 INSERT INTO project_setting values(0,'Project Name','New Project');
 INSERT INTO project_setting values(1,'Project Background','None');
 INSERT INTO project_setting values(2,'Project Goals','None');
@@ -4426,3 +4528,19 @@ insert into code_type (id,name) values (0,'event');
 insert into code_type (id,name) values (1,'context');
 insert into access_right (id,name,description,value,rationale) values (0,'None','No access rights',1,'Default');
 insert into privilege (id,name,description,value,rationale) values (0,'None','No privileges',10,'Default');
+INSERT INTO dataflow_type values(0,'Information','Information flow');
+INSERT INTO dataflow_type values(1,'Control','Control action');
+INSERT INTO dataflow_type values(2,'Feedback','Feedback action');
+INSERT INTO trust_boundary_type values(0,'Controller','Controller');
+INSERT INTO trust_boundary_type values(1,'Controlled Process','Controlled Process');
+INSERT INTO trust_boundary_type values(2,'Sensor','Sensor');
+INSERT INTO trust_boundary_type values(3,'Actuator','Actuator');
+INSERT INTO trust_boundary_type values(4,'General','General');
+INSERT INTO stpa_keyword values(0,'does not provide','Not providing causes hazards');
+INSERT INTO stpa_keyword values(1,'provides','Providing causes hazards');
+INSERT INTO stpa_keyword values(2,'provides too early','Incorrect timing / order');
+INSERT INTO stpa_keyword values(3,'provides too late','Incorrect timing / order');
+INSERT INTO stpa_keyword values(4,'provides out of order','Incorrect timing / order');
+INSERT INTO stpa_keyword values(5,'stopped too soon','Stopped too soon / applied to long');
+INSERT INTO stpa_keyword values(6,'applied too long','Stopped too soon / applied to long');
+INSERT INTO stpa_keyword values(7,'not applicable','Not applicable');

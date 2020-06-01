@@ -32,55 +32,10 @@ from flask_security.core import current_user
 from jsonpickle import encode
 from cairis.core.Borg import Borg
 from cairis.core.MySQLDatabaseProxy import MySQLDatabaseProxy,canonicalDbUser,canonicalDbName
-from cairis.controllers import ArchitecturalPatternController
-from cairis.controllers import AssetController
-from cairis.controllers import AttackerController
-from cairis.controllers import CExportController
 from cairis.controllers import CImportController
-from cairis.controllers import ConceptReferenceController
-from cairis.controllers import CountermeasureController
-from cairis.controllers import DataFlowController
-from cairis.controllers import DependencyController
-from cairis.controllers import DimensionController
-from cairis.controllers import DirectoryController
 from cairis.controllers import DocumentationController
-from cairis.controllers import DocumentReferenceController
-from cairis.controllers import DomainPropertyController
-from cairis.controllers import EnvironmentController
-from cairis.controllers import ExternalDocumentController
-from cairis.controllers import FindController
-from cairis.controllers import GoalController
-from cairis.controllers import GoalContributionController
-from cairis.controllers import LocationsController
-from cairis.controllers import MisuseCaseController
-from cairis.controllers import ObjectDependencyController
-from cairis.controllers import ObstacleController
-from cairis.controllers import PermissionsController
-from cairis.controllers import PersonaController
-from cairis.controllers import PersonaCharacteristicController
-from cairis.controllers import ProjectController
-from cairis.controllers import RequirementController
-from cairis.controllers import ResponseController
-from cairis.controllers import RiskController
-from cairis.controllers import RiskLevelController
-from cairis.controllers import RoleController
-from cairis.controllers import SecurityPatternController
-from cairis.controllers import SummaryController
-from cairis.controllers import TaskController
-from cairis.controllers import TaskCharacteristicController
-from cairis.controllers import TemplateAssetController
-from cairis.controllers import TemplateGoalController
-from cairis.controllers import TemplateRequirementController
-from cairis.controllers import ThreatController
-from cairis.controllers import TraceController
-from cairis.controllers import TrustBoundaryController
+from cairis.controllers import ObjectController
 from cairis.controllers import UploadController
-from cairis.controllers import UseCaseController
-from cairis.controllers import UserGoalController
-from cairis.controllers import ValidationController
-from cairis.controllers import ValueTypeController
-from cairis.controllers import VersionController
-from cairis.controllers import VulnerabilityController
 
 from cairis.daemon.main import main, api
 from cairis.tools.SessionValidator import get_session_id
@@ -245,125 +200,118 @@ def resetUser():
 
 
 # Architectural Pattern routes
-api.add_resource(ArchitecturalPatternController.ArchitecturalPatternsAPI, '/api/architectural_patterns', endpoint = 'architecturalpatterns')
-api.add_resource(ArchitecturalPatternController.ArchitecturalPatternByNameAPI, '/api/architectural_patterns/name/<path:name>', endpoint='architecturalpattern')
-api.add_resource(ArchitecturalPatternController.ComponentGoalModelAPI, '/api/architectural_patterns/component/goal/model/<path:component>', endpoint = 'componentgoals')
-api.add_resource(ArchitecturalPatternController.ComponentAssetModelAPI, '/api/architectural_patterns/component/asset/model/<path:component>', endpoint = 'componentassets')
-api.add_resource(ArchitecturalPatternController.ComponentModelAPI, '/api/architectural_patterns/component/model/<path:ap_name>', endpoint = 'componentmodel')
-api.add_resource(ArchitecturalPatternController.WeaknessAnalysisAPI, '/api/architectural_patterns/name/<path:architectural_pattern_name>/environment/<path:environment_name>/weakness_analysis', endpoint='architecturalweaknessanalysis')
-api.add_resource(ArchitecturalPatternController.SituateArchitecturalPatternAPI, '/api/architectural_patterns/name/<path:architectural_pattern_name>/environment/<path:environment_name>/situate', endpoint='situatearchitecturalpattern')
+api.add_resource(ObjectController.ObjectsAPI, '/api/architectural_patterns',endpoint='architecturalpatterns',resource_class_kwargs={'dao': 'ArchitecturalPatternDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/architectural_patterns/name/<path:name>',endpoint='architecturalpattern',resource_class_kwargs={'dao' : 'ArchitecturalPatternDAO'})
+api.add_resource(ObjectController.ModelByParameterAPI, '/api/architectural_patterns/component/goal/model/<path:parameter_string>',endpoint='componentgoals',resource_class_kwargs={'dao' : 'ArchitecturalPatternDAO','get_method' : 'get_component_goal_model','renderer' : 'dot'})
+api.add_resource(ObjectController.ModelByParameterAPI, '/api/architectural_patterns/component/asset/model/<path:parameter_string>',endpoint='componentassets',resource_class_kwargs={'dao' : 'ArchitecturalPatternDAO','get_method' : 'get_component_asset_model','renderer' : 'dot'})
+api.add_resource(ObjectController.ModelByParameterAPI, '/api/architectural_patterns/component/model/<path:parameter_string>',endpoint='componentmodel',resource_class_kwargs={'dao' : 'ArchitecturalPatternDAO','get_method' : 'get_component_model','renderer' : 'dot'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/architectural_patterns/name/<path:p1>/environment/<path:p2>/weakness_analysis',endpoint='weakness_analysis',resource_class_kwargs={'dao' : 'ArchitecturalPatternDAO','get_method' : 'get_weakness_analysis'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/architectural_patterns/name/<path:p1>/environment/<path:p2>/situate',endpoint='situate',resource_class_kwargs={'dao' : 'ArchitecturalPatternDAO','post_method' : 'situate_component_view','post_message' : 'Architectural Pattern successfully situated'})
 
 # Asset routes
-api.add_resource(AssetController.AssetsAPI, '/api/assets',endpoint='assets')
-api.add_resource(AssetController.AssetsSummaryAPI, '/api/assets/summary',endpoint='assetssummary')
-api.add_resource(AssetController.AssetByNameAPI, '/api/assets/name/<path:name>',endpoint='assetbyname')
-api.add_resource(AssetController.AssetByEnvironmentNamesAPI, '/api/assets/environment/<path:environment>/names',endpoint='assetbyenvironmentname')
-api.add_resource(AssetController.AssetNamesAPI, '/api/assets/all/names',endpoint='assetnames')
-api.add_resource(AssetController.AssetTypesAPI, '/api/assets/types',endpoint='assettypes')
-api.add_resource(AssetController.AssetTypeByNameAPI, '/api/assets/types/name/<path:name>',endpoint='assettypebyname')
-api.add_resource(AssetController.AssetValuesAPI, '/api/environments/<path:environment_name>/asset-values',endpoint='assetvalues')
-api.add_resource(AssetController.AssetValueByNameAPI, '/api/environments/<path:environment_name>/asset-values/name/<path:name>',endpoint='assetvaluebyname')
-api.add_resource(AssetController.AssetModelAPI, '/api/assets/model/environment/<path:environment>/asset/<path:asset>',endpoint='assetmodel')
-api.add_resource(AssetController.AssetAssociationAPI, '/api/assets/association',endpoint='assetassociation')
-api.add_resource(AssetController.AssetAssociationByNameAPI, '/api/assets/association/environment/<path:environment_name>/head/<path:head_name>/tail/<path:tail_name>',endpoint='assetassociationbyname')
+api.add_resource(ObjectController.ObjectsAPI, '/api/assets',endpoint='assets',resource_class_kwargs={'dao': 'AssetDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/assets/name/<path:name>',endpoint='asset',resource_class_kwargs={'dao' : 'AssetDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/assets/summary',endpoint='assetssummary',resource_class_kwargs={'dao' : 'AssetDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/assets/environment/<path:parameter_string>/names',endpoint='assetbyenvironmentname',resource_class_kwargs={'dao' : 'AssetDAO','get_method' : 'get_asset_names_by_environment'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/assets/all/names',endpoint='assetnames',resource_class_kwargs={'dao' : 'AssetDAO','get_method' : 'get_asset_names', 'path_parameters' : [('environment','')]})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/assets/types',endpoint='assettypes',resource_class_kwargs={'dao' : 'AssetDAO','get_method' : 'get_asset_types', 'post_method' : 'add_asset_type', 'path_parameters' : [('environment','')], 'isType' : True})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/assets/types/name/<path:parameter_string>',endpoint='assettypebyname',resource_class_kwargs={'dao' : 'AssetDAO','get_method' : 'get_asset_type_by_name', 'put_method' : 'update_asset_type','del_method' : 'delete_asset_type', 'path_parameters' : [('environment','')], 'isType' : True})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/assets/model/environment/<path:p1>/asset/<path:p2>',endpoint='assetmodel',resource_class_kwargs={'dao' : 'AssetDAO','get_method' : 'get_asset_model','renderer' : 'dot', 'path_parameters' : [('hide_concerns','1')]})
+
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/assets/association',endpoint='assetassociation',resource_class_kwargs={'dao' : 'AssetAssociationDAO','get_method' : 'get_asset_associations', 'post_method' : 'add_asset_association'})
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI, '/api/assets/association/environment/<path:p1>/head/<path:p2>/tail/<path:p3>',endpoint='assetassociationbyname',resource_class_kwargs={'dao' : 'AssetAssociationDAO','get_method' : 'get_asset_association', 'put_method' : 'update_asset_association','del_method' : 'delete_asset_association'})
 
 # Attacker routes
-api.add_resource(AttackerController.AttackersAPI, '/api/attackers',endpoint='attackers')
-api.add_resource(AttackerController.AttackersSummaryAPI, '/api/attackers/summary',endpoint='attackerssummary')
-api.add_resource(AttackerController.AttackerByNameAPI, '/api/attackers/name/<path:name>',endpoint='attackerbyname')
-api.add_resource(AttackerController.AttackerCapabilitiesAPI, '/api/attackers/capabilities',endpoint='attackercapabilities')
-api.add_resource(AttackerController.AttackerCapabilityByNameAPI, '/api/attackers/capabilities/name/<path:name>',endpoint='attackercapability')
-api.add_resource(AttackerController.AttackerMotivationsAPI, '/api/attackers/motivations',endpoint='motivations')
-api.add_resource(AttackerController.AttackerMotivationByNameAPI, '/api/attackers/motivations/name/<path:name>',endpoint='motivationbyname')
+api.add_resource(ObjectController.ObjectsAPI, '/api/attackers',endpoint='attackers',resource_class_kwargs={'dao': 'AttackerDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/attackers/name/<path:name>',endpoint='attackerbyname',resource_class_kwargs={'dao' : 'AttackerDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/attackers/summary',endpoint='attackerssummary',resource_class_kwargs={'dao' : 'AttackerDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/attackers/capabilities',endpoint='attackercapabilities',resource_class_kwargs={'dao' : 'AttackerDAO','get_method' : 'get_attacker_capabilities','path_parameters' : [('environment_name','')]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/attackers/capabilities/name/<path:parameter_string>',endpoint='attackercapabilitiesbyname',resource_class_kwargs={'dao' : 'AttackerDAO','get_method' : 'get_attacker_capabilities','path_parameters' : [('environment_name','')]})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/attackers/motivations',endpoint='attackermotivations',resource_class_kwargs={'dao' : 'AttackerDAO','get_method' : 'get_attacker_motivations','path_parameters' : [('environment_name','')]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/attackers/motivations/name/<path:parameter_string>',endpoint='attackermotivationsbyname',resource_class_kwargs={'dao' : 'AttackerDAO','get_method' : 'get_attacker_capabilities','path_parameters' : [('environment_name','')]})
 
 # Concept Reference routes
-api.add_resource(ConceptReferenceController.ConceptReferencesAPI, '/api/concept_references',endpoint='concept_references')
-api.add_resource(ConceptReferenceController.ConceptReferenceByNameAPI, '/api/concept_references/name/<path:name>',endpoint='concept_reference')
+api.add_resource(ObjectController.ObjectsAPI, '/api/concept_references',endpoint='concept_reference',resource_class_kwargs={'dao': 'ConceptReferenceDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/concept_references/name/<path:name>',endpoint='concept_references',resource_class_kwargs={'dao' : 'ConceptReferenceDAO'})
 
 # Countermeasure routes
-api.add_resource(CountermeasureController.CountermeasuresAPI, '/api/countermeasures',endpoint='countermeasures')
-api.add_resource(CountermeasureController.CountermeasureByNameAPI, '/api/countermeasures/name/<path:name>',endpoint='countermeasure')
-api.add_resource(CountermeasureController.GenerateAssetAPI, '/api/countermeasures/name/<path:name>/generate_asset',endpoint='countermeasure_generate_asset')
-api.add_resource(CountermeasureController.GenerateAssetFromTemplateAPI, '/api/countermeasures/name/<path:name>/template_asset/<path:template_asset_name>/generate_asset',endpoint='countermeasure_generate_asset_from_template')
-api.add_resource(CountermeasureController.SituateCountermeasurePatternAPI, '/api/countermeasures/name/<path:name>/security_pattern/<path:security_pattern_name>/situate',endpoint='countermeasure_situate_countermeasure_pattern')
-api.add_resource(CountermeasureController.AssociateSituatedPatternAPI, '/api/countermeasures/name/<path:name>/security_pattern/<path:security_pattern_name>/associate_situated',endpoint='associate_situated_pattern')
-api.add_resource(CountermeasureController.RemoveSituatedPatternAPI, '/api/countermeasures/name/<path:name>/security_pattern/<path:security_pattern_name>/remove_situated',endpoint='remove_situated_pattern')
-api.add_resource(CountermeasureController.TargetsAPI, '/api/countermeasures/targets/environment/<path:environment>',endpoint='targets')
-api.add_resource(CountermeasureController.CountermeasureTasksAPI, '/api/countermeasures/tasks/environment/<path:environment>',endpoint='countermeasuretasks')
-api.add_resource(CountermeasureController.CandidatePatternsAPI, '/api/countermeasures/name/<path:name>/candidate_patterns',endpoint='candidate_patterns')
-api.add_resource(CountermeasureController.CountermeasurePatternsAPI, '/api/countermeasures/name/<path:name>/patterns',endpoint='countermeasure_patterns')
+api.add_resource(ObjectController.ObjectsAPI, '/api/countermeasures',endpoint='countermeasures',resource_class_kwargs={'dao': 'CountermeasureDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/countermeasures/name/<path:name>',endpoint='countermeasure',resource_class_kwargs={'dao' : 'CountermeasureDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/countermeasures/name/<path:parameter_string>/generate_asset',endpoint='countermeasure_generate_asset', resource_class_kwargs={'dao' : 'CountermeasureDAO', 'post_method' : 'generate_asset'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/countermeasures/name/<path:p1>/template_asset/<path:p2>/generate_asset',endpoint='countermeasure_generate_asset_from_template', resource_class_kwargs={'dao' : 'CountermeasureDAO', 'post_method' : 'generate_asset_from_template'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/countermeasures/name/<path:p1>/security_pattern/<path:p2>/situate',endpoint='countermeasure_situate_countermeasure_pattern', resource_class_kwargs={'dao' : 'CountermeasureDAO', 'post_method' : 'situate_countermeasure_pattern'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/countermeasures/name/<path:p1>/security_pattern/<path:p2>/associate_situated',endpoint='associate_situated_pattern', resource_class_kwargs={'dao' : 'CountermeasureDAO', 'post_method' : 'associate_situated_pattern'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/countermeasures/name/<path:p1>/security_pattern/<path:p2>/remove_situated',endpoint='remove_situated_pattern', resource_class_kwargs={'dao' : 'CountermeasureDAO', 'del_method' : 'remove_situated_pattern'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/countermeasures/targets/environment/<path:parameter_string>',endpoint='targets',resource_class_kwargs={'dao' : 'CountermeasureDAO','get_method' : 'get_countermeasure_targets', 'path_parameters' : [('requirement',[])]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/countermeasures/tasks/environment/<path:parameter_string>',endpoint='countermeasuretasks',resource_class_kwargs={'dao' : 'CountermeasureDAO','get_method' : 'get_countermeasure_tasks', 'path_parameters' : [('role',[])]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/countermeasures/name/<path:parameter_string>/candidate_patterns',endpoint='candidate_patterns',resource_class_kwargs={'dao' : 'CountermeasureDAO', 'get_method' : 'candidate_countermeasure_patterns'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/countermeasures/name/<path:parameter_string>/patterns',endpoint='countermeasure_patterns', resource_class_kwargs={'dao':'CountermeasureDAO', 'get_method' : 'countermeasure_patterns'})
 
 # Dataflow routes
-api.add_resource(DataFlowController.DataFlowsAPI, '/api/dataflows',endpoint='dataflows')
-api.add_resource(DataFlowController.DataFlowByNameAPI, '/api/dataflows/name/<path:dataflow_name>/environment/<path:environment_name>',endpoint='dataflow')
-api.add_resource(DataFlowController.DataFlowDiagramAPI, '/api/dataflows/diagram/environment/<path:environment_name>/filter_type/<path:filter_type>/filter_name/<path:filter_element>',endpoint='dataflowdiagram')
+api.add_resource(ObjectController.ObjectsAPI, '/api/dataflows',endpoint='dataflows',resource_class_kwargs={'dao': 'DataFlowDAO'})
+api.add_resource(ObjectController.ObjectByTwoParametersAPI, '/api/dataflows/name/<path:p1>/environment/<path:p2>',endpoint='dataflow',resource_class_kwargs={'dao' : 'DataFlowDAO'})
+api.add_resource(ObjectController.ModelByThreeParametersAPI, '/api/dataflows/diagram/environment/<path:p1>/filter_type/<path:p2>/filter_name/<path:p3>',endpoint='dataflowdiagram',resource_class_kwargs={'dao' : 'DataFlowDAO','get_method' : 'get_dataflow_diagram','renderer' : 'dot', 'model_type' : 'dataflow'})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/dataflows/control_structure/environment/<path:p1>/filter_name/<path:p2>',endpoint='controlstructure',resource_class_kwargs={'dao' : 'DataFlowDAO','get_method' : 'get_control_structure','renderer' : 'dot', 'model_type' : 'control_structure'})
 
 # Dependency routes
-api.add_resource(DependencyController.DependenciesAPI, '/api/dependencies',endpoint='dependencies')
-api.add_resource(DependencyController.DependencyByNameAPI, '/api/dependencies/environment/<environment>/depender/<depender>/dependee/<dependee>/dependency/<dependency>',endpoint='dependency')
+api.add_resource(ObjectController.ObjectsAPI, '/api/dependencies',endpoint='dependencies',resource_class_kwargs={'dao': 'DependencyDAO'})
+api.add_resource(ObjectController.ObjectByFourParametersAPI, '/api/dependencies/environment/<p1>/depender/<p2>/dependee/<p3>/dependency/<p4>',endpoint='dependency',resource_class_kwargs={'dao': 'DependencyDAO'})
 
-# DimensionController
-api.add_resource(DimensionController.DimensionsAPI, '/api/dimensions/table/<path:table>',endpoint='dimensions')
-api.add_resource(DimensionController.DimensionNamesAPI, '/api/dimensions/table/<path:table>/environment/<path:environment>',endpoint='dimension')
+# Dimension routes
+api.add_resource(ObjectController.ConstrainedObjectsByNameAPI, '/api/dimensions/table/<path:parameter_string>',endpoint='dimensions',resource_class_kwargs={'dao' : 'DimensionDAO','constraint_parameter' : 'constraint_id'})
+api.add_resource(ObjectController.ObjectsByTwoParametersAPI, '/api/dimensions/table/<path:p1>/environment/<path:p2>',endpoint='dimension',resource_class_kwargs={'dao' : 'DimensionDAO'})
 
 # DirectoryController
-api.add_resource(DirectoryController.ThreatDirectoryAPI, '/api/directory/threat/<path:entry_name>',endpoint='threatdirectory')
-api.add_resource(DirectoryController.VulnerabilityDirectoryAPI, '/api/directory/vulnerability/<path:entry_name>',endpoint='vulnerabilitydirectory')
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/directory/threat/<path:parameter_string>',endpoint='threatdirectory',resource_class_kwargs={'dao' : 'DirectoryDAO','get_method' : 'get_threat_directory'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/directory/vulnerability/<path:parameter_string>',endpoint='vulnerabilitydirectory',resource_class_kwargs={'dao' : 'DirectoryDAO','get_method' : 'get_vulnerability_directory'})
 
 # Document Reference routes
-api.add_resource(DocumentReferenceController.DocumentReferencesAPI, '/api/document_references',endpoint='document_references')
-api.add_resource(DocumentReferenceController.DocumentReferenceByNameAPI, '/api/document_references/name/<path:name>',endpoint='document_reference')
+api.add_resource(ObjectController.ObjectsAPI, '/api/document_references',endpoint='document_reference',resource_class_kwargs={'dao': 'DocumentReferenceDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/document_references/name/<path:name>',endpoint='document_references',resource_class_kwargs={'dao' : 'DocumentReferenceDAO'})
 
 # Documentation route
 api.add_resource(DocumentationController.DocumentationAPI, '/api/documentation/type/<path:doc_type>/format/<path:doc_format>',endpoint='documentation')
 
 # Domain Property routes
-api.add_resource(DomainPropertyController.DomainPropertiesAPI, '/api/domainproperties',endpoint='domain_properties')
-api.add_resource(DomainPropertyController.DomainPropertiesByNameAPI, '/api/domainproperties/name/<path:name>',endpoint='domain_property')
+api.add_resource(ObjectController.ObjectsAPI, '/api/domainproperties',endpoint='domainproperties',resource_class_kwargs={'dao': 'DomainPropertyDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/domainproperties/name/<path:name>',endpoint='domainproperty',resource_class_kwargs={'dao' : 'DomainPropertyDAO'})
 
 # Environment routes
-api.add_resource(EnvironmentController.EnvironmentsAPI, '/api/environments',endpoint='environments')
-api.add_resource(EnvironmentController.EnvironmentNamesAPI, '/api/environments/names', '/api/environments/all/names',endpoint='environment_names')
-api.add_resource(EnvironmentController.EnvironmentByNameAPI, '/api/environments/name/<path:name>',endpoint='environment')
-api.add_resource(
-  EnvironmentController.EnvironmentsByThreatVulnerability,
-  '/api/environments/threat/<path:threat>/vulnerability/<path:vulnerability>',
-  '/api/environments/vulnerability/<path:vulnerability>/threat/<path:threat>',endpoint='environments_tv'
-)
-api.add_resource(
-  EnvironmentController.EnvironmentNamesByThreatVulnerability,
-  '/api/environments/threat/<path:threat>/vulnerability/<path:vulnerability>/names',
-  '/api/environments/vulnerability/<path:vulnerability>/threat/<path:threat>/names',endpoint='environment_names_tv'
-)
-api.add_resource(EnvironmentController.EnvironmentNamesByRisk,'/api/environments/risk/<path:risk>/names',endpoint='environment_names_risk')
+api.add_resource(ObjectController.ObjectsAPI, '/api/environments',endpoint='environments',resource_class_kwargs={'dao': 'EnvironmentDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/environments/name/<path:name>',endpoint='environment',resource_class_kwargs={'dao' : 'EnvironmentDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/environments/names','/api/environments/all/names',endpoint='environment_names',resource_class_kwargs={'dao' : 'EnvironmentDAO','get_method' : 'get_environment_names'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI,'/api/environments/threat/<path:p1>/vulnerability/<path:p2>/names',endpoint='environment_names_tv', resource_class_kwargs={'dao':'EnvironmentDAO',  'get_method' : 'get_environment_names_by_threat_vulnerability'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI,'/api/environments/vulnerability/<path:p1>/threat/<path:p2>/names',endpoint='environment_names_vt', resource_class_kwargs={'dao':'EnvironmentDAO',  'get_method' : 'get_environment_names_by_vulnerability_threat'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI,'/api/environments/risk/<path:parameter_string>/names',endpoint='environment_names_risk', resource_class_kwargs={'dao':'EnvironmentDAO',  'get_method' : 'get_environment_names_by_risk'})
 
 # External Document routes
-api.add_resource(ExternalDocumentController.ExternalDocumentsAPI, '/api/external_documents',endpoint='external_documents')
-api.add_resource(ExternalDocumentController.ExternalDocumentByNameAPI, '/api/external_documents/name/<path:name>',endpoint='external_document')
+api.add_resource(ObjectController.ObjectsAPI, '/api/external_documents',endpoint='external_documents',resource_class_kwargs={'dao': 'ExternalDocumentDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/external_documents/name/<path:name>',endpoint='external_document',resource_class_kwargs={'dao' : 'ExternalDocumentDAO'})
 
 
 # Goal routes
-api.add_resource(GoalController.GoalsAPI, '/api/goals',endpoint='goals')
-api.add_resource(GoalController.GoalsSummaryAPI, '/api/goals/summary',endpoint='goalssummary')
-api.add_resource(GoalController.GoalByNameAPI, '/api/goals/name/<path:name>',endpoint='goal')
-api.add_resource(GoalController.GoalByEnvironmentNamesAPI, '/api/goals/environment/<path:environment>/names',endpoint='goal_environment')
-api.add_resource(GoalController.GoalModelAPI, '/api/goals/model/environment/<path:environment>/goal/<path:goal>/usecase/<path:usecase>',endpoint='goal_model')
-api.add_resource(GoalController.ResponsibilityModelAPI, '/api/responsibility/model/environment/<path:environment>/role/<path:role>',endpoint='responsibility_model')
-api.add_resource(GoalController.GoalAssociationAPI, '/api/goals/association',endpoint='goal_associations')
-api.add_resource(GoalController.GoalAssociationByNameAPI, '/api/goals/association/environment/<path:environment_name>/goal/<path:goal_name>/subgoal/<path:subgoal_name>',endpoint='goal_association')
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/goals',endpoint='goals',resource_class_kwargs={'dao': 'GoalDAO', 'get_method' : 'get_objects', 'post_method' : 'add_object', 'path_parameters' : [('constraint_id',-1),('coloured',False)]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/goals/name/<path:parameter_string>',endpoint='goal',resource_class_kwargs={'dao' : 'GoalDAO', 'put_method' : 'update_object', 'get_method' : 'get_object_by_name', 'del_method' : 'delete_object', 'path_parameters' : [('constraint_id',-1),('coloured',False)]})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/goals/summary',endpoint='goalssummary',resource_class_kwargs={'dao' : 'GoalDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/goals/environment/<path:parameter_string>/names',endpoint='goal_environment',resource_class_kwargs={'dao' : 'GoalDAO', 'get_method' : 'get_goal_names'})
+api.add_resource(ObjectController.ModelByThreeParametersAPI, '/api/goals/model/environment/<path:p1>/goal/<path:p2>/usecase/<path:p3>',endpoint='goalmodel',resource_class_kwargs={'dao' : 'GoalDAO','get_method' : 'get_goal_model','renderer' : 'dot', 'path_parameters' : [('top','0')], 'model_type' : 'goal'})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/responsibility/model/environment/<path:p1>/role/<path:p2>',endpoint='responsibilitymodel',resource_class_kwargs={'dao' : 'GoalDAO','get_method' : 'get_responsibility_model','renderer' : 'dot', 'model_type' : 'responsibility'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/goals/association',endpoint='goal_associations',resource_class_kwargs={'dao': 'GoalAssociationDAO', 'get_method' : 'get_goal_associations', 'post_method' : 'add_goal_association', 'path_parameters' : [('environment_name','')]})
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI,'/api/goals/association/environment/<path:p1>/goal/<path:p2>/subgoal/<path:p3>',endpoint='goal_association',resource_class_kwargs={'dao' : 'GoalAssociationDAO', 'get_method' : 'get_goal_association', 'put_method' : 'update_goal_association', 'del_method' : 'delete_goal_association'})
+
 
 # Goal contribution routes
-api.add_resource(GoalContributionController.GoalContributionsAPI, '/api/goal_contributions',endpoint='goal_contributions')
-api.add_resource(GoalContributionController.GoalContributionByNameAPI, '/api/goal_contributions/source/<sourceName>/target/<targetName>',endpoint='goal_contribution')
+api.add_resource(ObjectController.ObjectsAPI, '/api/goal_contributions',endpoint='goal_contributions',resource_class_kwargs={'dao': 'GoalContributionDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/goal_contributions/source/<path:p1>/target/<path:p2>',endpoint='goal_contribution',resource_class_kwargs={'dao' : 'GoalContributionDAO','get_method' : 'get_objects', 'put_method' : 'update_object', 'del_method' : 'delete_object'})
 
-# Export route
-api.add_resource(CExportController.CExportFileAPI, '/api/export/file',endpoint='export')
-api.add_resource(CExportController.CExportArchitecturalPatternAPI, '/api/export/file/architectural_pattern/<path:architectural_pattern_name>',endpoint='exportarchitecturalpattern')
-api.add_resource(CExportController.CExportSecurityPatternsAPI, '/api/export/file/security_patterns',endpoint='exportsecuritypatterns')
-api.add_resource(CExportController.CExportGRLAPI, '/api/export/file/grl/task/<path:task_name>/persona/<path:persona_name>/environment/<path:environment_name>',endpoint='exportgrl')
+# Export routes
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/export/file',endpoint='export',resource_class_kwargs={'dao' : 'ExportDAO', 'get_method' : 'file_export', 'path_parameters' : [('filename','model'),('fileType','xml')]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/export/file/architectural_pattern/<path:parameter_string>',endpoint='exportarchitecturalpattern', resource_class_kwargs={'dao' : 'ExportDAO', 'get_method' : 'architectural_pattern_export', 'path_parameters' : [('filename','')]})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/export/file/security_patterns',endpoint='exportsecuritypatterns',resource_class_kwargs={'dao' : 'ExportDAO', 'get_method' : 'security_patterns_export', 'path_parameters' : [('filename','security_patterns.xml')]})
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI, '/api/export/file/grl/task/<path:p1>/persona/<path:p2>/environment/<path:p3>',endpoint='exportgrl', resource_class_kwargs={'dao' : 'ExportDAO', 'get_method' : 'grl_export', 'path_parameters' : [('filename','')]})
 
 # Find route
-api.add_resource(FindController.FindAPI, '/api/find/<path:search_string>',endpoint='find')
+api.add_resource(ObjectController.ObjectsByNameAPI, '/api/find/<path:parameter_string>',endpoint='find',resource_class_kwargs={'dao' : 'FindDAO'})
 
 # Import routes
 api.add_resource(CImportController.CImportPackageAPI, '/api/import/package',endpoint='import_package')
@@ -371,175 +319,168 @@ api.add_resource(CImportController.CImportTextAPI, '/api/import/text',endpoint='
 api.add_resource(CImportController.CImportFileAPI, '/api/import/file/type/<path:type>',endpoint='import_file')
 
 # Locations routes
-api.add_resource(LocationsController.LocationsAPI, '/api/locations',endpoint='locations')
-api.add_resource(LocationsController.LocationsByNameAPI, '/api/locations/name/<path:name>',endpoint='locations_name')
-api.add_resource(LocationsController.LocationsModelAPI, '/api/locations/model/locations/<path:locations>/environment/<path:environment>',endpoint='locationsmodel')
+api.add_resource(ObjectController.ObjectsAPI, '/api/locations',endpoint='locations',resource_class_kwargs={'dao': 'LocationsDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/locations/name/<path:name>',endpoint='location',resource_class_kwargs={'dao' : 'LocationsDAO'})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/locations/model/locations/<path:p1>/environment/<path:p2>',endpoint='locationmodel',resource_class_kwargs={'dao' : 'LocationsDAO','get_method' : 'get_locations_model','renderer' : 'dot'})
 
 # Misuse case routes
-api.add_resource(MisuseCaseController.MisuseCasesAPI, '/api/misusecases',endpoint='misusecases')
-api.add_resource(MisuseCaseController.MisuseCaseByRiskNameAPI, '/api/misusecases/risk/<path:risk_name>',endpoint='misusecase_risk')
-api.add_resource(MisuseCaseController.MisuseCaseByNameAPI, '/api/misusecases/name/<path:misuse_case_name>',endpoint='misusecase')
-api.add_resource(MisuseCaseController.MisuseCaseByTVAPI, '/api/misusecases/threat/<path:threat>/vulnerability/<path:vulnerability>',endpoint='misusecase_tv')
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/misusecases',endpoint='misusecases',resource_class_kwargs={'dao': 'RiskDAO','get_method' : 'get_misuse_cases', 'path_parameters' : [('constraint_id',-1)]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/misusecases/name/<path:parameter_string>',endpoint='misusecase',resource_class_kwargs={'dao': 'RiskDAO','get_method' : 'get_misuse_case_by_name'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/misusecases/risk/<path:parameter_string>',endpoint='misusecase_risk',resource_class_kwargs={'dao': 'RiskDAO','get_method' : 'get_misuse_case_by_risk_name'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/misusecases/threat/<path:p1>/vulnerability/<path:p2>',endpoint='misusecase_tv',resource_class_kwargs={'dao' : 'RiskDAO','get_method' : 'get_misuse_case_by_threat_vulnerability'})
 
 # Object dependency routes
-api.add_resource(ObjectDependencyController.ObjectDependencyAPI, '/api/object_dependency/dimension/<path:dimension_name>/object/<path:object_name>',endpoint='object_dependency')
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/object_dependency/dimension/<path:p1>/object/<path:p2>',endpoint='object_dependency',resource_class_kwargs={'dao' : 'ObjectDependencyDAO','get_method' : 'report_dependencies', 'del_method' : 'delete_dependencies', 'del_message' : 'Object dependencies successfully deleted'})
 
 # Obstacle routes
-api.add_resource(ObstacleController.ObstaclesAPI, '/api/obstacles',endpoint='obstacles')
-api.add_resource(ObstacleController.ObstaclesSummaryAPI, '/api/obstacles/summary',endpoint='obstaclessummary')
-api.add_resource(ObstacleController.ObstacleByNameAPI, '/api/obstacles/name/<path:name>',endpoint='obstacle')
-api.add_resource(ObstacleController.GenerateVulnerabilityAPI, '/api/obstacles/name/<path:name>/generate_vulnerability',endpoint='generatevulnerability')
-api.add_resource(ObstacleController.ObstacleByEnvironmentNamesAPI, '/api/obstacles/environment/<path:environment>/names',endpoint='obstacle_environment')
-api.add_resource(ObstacleController.ObstacleModelAPI, '/api/obstacles/model/environment/<path:environment>/obstacle/<path:obstacle>',endpoint='obstacle_model')
+api.add_resource(ObjectController.ObjectsAPI, '/api/obstacles',endpoint='obstacles',resource_class_kwargs={'dao': 'ObstacleDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/obstacles/name/<path:name>',endpoint='obstacle',resource_class_kwargs={'dao' : 'ObstacleDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/obstacles/summary',endpoint='obstaclessummary',resource_class_kwargs={'dao' : 'ObstacleDAO'})
+
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/obstacles/name/<path:parameter_string>/generate_vulnerability',endpoint='generatevulnerability',resource_class_kwargs={'dao' : 'ObstacleDAO','post_method' : 'generate_vulnerability','post_message' : 'Vulnerability successfully generated'})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/obstacles/model/environment/<path:p1>/obstacle/<path:p2>',endpoint='obstaclemodel',resource_class_kwargs={'dao' : 'ObstacleDAO','get_method' : 'get_obstacle_model','renderer' : 'dot'})
 
 # Permissions routes
-api.add_resource(PermissionsController.PermissionsAPI, '/api/permissions/database/<path:db_name>',endpoint='permissions')
-api.add_resource(PermissionsController.ChangePermissionAPI, '/api/permissions/database/<path:db_name>/user/<path:user_id>/permission/<path:permission>',endpoint='changepermission')
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/permissions/database/<path:parameter_string>',endpoint='permissions', resource_class_kwargs={'dao' : 'PermissionsDAO', 'get_method' : 'get_permissions'})
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI, '/api/permissions/database/<path:p1>/user/<path:p2>/permission/<path:p3>',endpoint='changepermission', resource_class_kwargs={'dao' : 'PermissionsDAO', 'post_method' : 'set_permissions'})
 
 # Persona routes
-api.add_resource(PersonaController.PersonasAPI, '/api/personas',endpoint='personas')
-api.add_resource(PersonaController.PersonasSummaryAPI, '/api/personas/summary',endpoint='personasummary')
-api.add_resource(PersonaController.PersonaNamesAPI, '/api/personas/names', '/api/personas/all/names',endpoint='persona_names')
-api.add_resource(PersonaController.PersonaByNameAPI, '/api/personas/name/<path:name>',endpoint='persona')
-api.add_resource(PersonaController.PersonaModelByNameAPI, '/api/personas/model/name/<path:persona>/variable/<path:variable>/characteristic/<path:characteristic>',endpoint='persona_model')
-api.add_resource(PersonaController.PersonaCharacteristicsByNameAPI, '/api/personas/characteristics/name/<path:persona>/variable/<path:variable>/characteristic/<path:characteristic>',endpoint='persona_characteristic_persona')
-api.add_resource(PersonaController.PersonaTypesAPI, '/api/personas/types',endpoint='persona_types')
+api.add_resource(ObjectController.ObjectsAPI, '/api/personas',endpoint='personas',resource_class_kwargs={'dao': 'PersonaDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/personas/name/<path:name>',endpoint='persona',resource_class_kwargs={'dao' : 'PersonaDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/personas/summary',endpoint='personassummary',resource_class_kwargs={'dao' : 'PersonaDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/personas/names',endpoint='persona_names',resource_class_kwargs={'dao' : 'PersonaDAO','get_method' : 'get_persona_names'})
+api.add_resource(ObjectController.ModelByThreeParametersAPI, '/api/personas/model/name/<path:p1>/variable/<path:p2>/characteristic/<path:p3>',endpoint='persona_model',resource_class_kwargs={'dao' : 'PersonaDAO','get_method' : 'get_persona_model','renderer' : 'dot', 'model_type' : 'persons'})
+
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI,'/api/personas/characteristics/name/<path:p1>/variable/<path:p2>/characteristic/<path:p3>',endpoint='persona_characteristic_persona',resource_class_kwargs={'dao' : 'PersonaDAO', 'get_method' : 'get_persona_characteristics'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/personas/types',endpoint='persona_types',resource_class_kwargs={'dao' : 'PersonaDAO','get_method' : 'get_persona_types'})
 
 # Persona Characteristic routes
-api.add_resource(PersonaCharacteristicController.PersonaCharacteristicsAPI, '/api/persona_characteristics',endpoint='persona_characteristics')
-api.add_resource(PersonaCharacteristicController.PersonaCharacteristicsSummaryAPI, '/api/persona_characteristics/summary',endpoint='personacharacteristicssummary')
-api.add_resource(PersonaCharacteristicController.PersonaCharacteristicByNameAPI, '/api/persona_characteristics/name/<path:name>',endpoint='persona_characteristic')
+api.add_resource(ObjectController.ObjectsAPI, '/api/persona_characteristics',endpoint='persona_characteristics',resource_class_kwargs={'dao': 'PersonaCharacteristicDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/persona_characteristics/name/<path:name>',endpoint='persona_characteristic',resource_class_kwargs={'dao' : 'PersonaCharacteristicDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/persona_characteristics/summary',endpoint='personacharacteristicssummary',resource_class_kwargs={'dao' : 'PersonaCharacteristicDAO'})
 
 # Project routes
-api.add_resource(ProjectController.ProjectSettingsAPI, '/api/settings',endpoint='project_settings')
-api.add_resource(ProjectController.ProjectClearAPI, '/api/settings/clear',endpoint='project_clear')
-api.add_resource(ProjectController.ProjectCreateDatabaseAPI, '/api/settings/database/<path:db_name>/create',endpoint='database_create')
-api.add_resource(ProjectController.ProjectOpenDatabaseAPI, '/api/settings/database/<path:db_name>/open',endpoint='database_open')
-api.add_resource(ProjectController.ProjectDeleteDatabaseAPI, '/api/settings/database/<path:db_name>/delete',endpoint='database_delete')
-api.add_resource(ProjectController.ProjectShowDatabasesAPI, '/api/settings/databases',endpoint='show_databases')
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/settings',endpoint='project_settings',resource_class_kwargs={'dao' : 'ProjectDAO','get_method' : 'get_settings','put_method' : 'apply_settings'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/settings/clear',endpoint='project_clear', resource_class_kwargs={'dao' : 'ProjectDAO', 'post_method' : 'clear_project'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/settings/database/<path:parameter_string>/create',endpoint='database_create',resource_class_kwargs={'dao' : 'ProjectDAO', 'post_method' : 'create_new_database'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/settings/database/<path:parameter_string>/open',endpoint='database_open',resource_class_kwargs={'dao' : 'ProjectDAO', 'post_method' : 'open_database'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/settings/database/<path:parameter_string>/delete',endpoint='database_delete', resource_class_kwargs={'dao' : 'ProjectDAO', 'post_method' : 'delete_database'})
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/settings/databases',endpoint='show_databases',resource_class_kwargs={'dao' : 'ProjectDAO','get_method' : 'show_databases'})
 
 # Requirement routes
-api.add_resource(RequirementController.RequirementsAPI, '/api/requirements',endpoint='requirements')
-api.add_resource(RequirementController.RequirementsByAssetAPI, '/api/requirements/asset/<path:name>',endpoint='requirements_assets')
-api.add_resource(RequirementController.RequirementsByEnvironmentAPI, '/api/requirements/environment/<path:name>',endpoint='requirement_environments')
-api.add_resource(RequirementController.RequirementNamesByAssetAPI, '/api/requirements/asset/<path:name>/names',endpoint='requirements_assets_names')
-api.add_resource(RequirementController.RequirementNamesByEnvironmentAPI, '/api/requirements/environment/<path:name>/names',endpoint='requirement_environments_names')
-api.add_resource(RequirementController.RequirementByNameAPI, '/api/requirements/name/<path:name>',endpoint='requirement')
-api.add_resource(RequirementController.RequirementByNameAPI, '/api/requirements/shortcode/<path:name>',endpoint='requirementshortcode')
-api.add_resource(RequirementController.ConceptMapModelAPI, '/api/requirements/model/environment/<path:environment>/requirement/<path:requirement>',endpoint='conceptmapmodel')
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/requirements',endpoint='requirements', resource_class_kwargs={'dao' : 'RequirementDAO', 'get_method' : 'get_requirements', 'post_method' : 'add_requirement', 'path_parameters' : [('ordered',0),('constraint_id',''),('asset',None),('environment',None)]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/requirements/asset/<path:parameter_string>',endpoint='requirement_assets',resource_class_kwargs={'dao' : 'RequirementDAO', 'get_method' : 'get_requirements_by_asset','path_parameters' : [('ordered',1)]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/requirements/environment/<path:parameter_string>',endpoint='requirement_environments',resource_class_kwargs={'dao' : 'RequirementDAO', 'get_method' : 'get_requirements_by_environment','path_parameters' : [('ordered',1)]})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/requirements/asset/<path:parameter_string>/names',endpoint='requirements_assets_names',resource_class_kwargs={'dao' : 'RequirementDAO', 'get_method' : 'get_asset_requirement_names'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/requirements/environment/<path:parameter_string>/names',endpoint='requirement_environments_names',resource_class_kwargs={'dao' : 'RequirementDAO', 'get_method' : 'get_environment_requirement_names'})
+
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/requirements/name/<path:name>','/api/requirements/shortcode/<path:name>',endpoint='requirement',resource_class_kwargs={'dao' : 'RequirementDAO'})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/requirements/model/environment/<path:p1>/requirement/<path:p2>',endpoint='conceptmapmodel',resource_class_kwargs={'dao' : 'RequirementDAO','get_method' : 'get_concept_map_model','renderer' : 'dot','path_parameters' : [('asset','0')]})
 
 # Response routes
-api.add_resource(ResponseController.ResponsesAPI, '/api/responses',endpoint='reponses')
-api.add_resource(ResponseController.ResponseByNameAPI, '/api/responses/name/<path:name>',endpoint='response')
-api.add_resource(ResponseController.ResponseByNameGenerateAPI, '/api/responses/name/<path:name>/generate_goal',endpoint='generate_goal')
+api.add_resource(ObjectController.ObjectsAPI, '/api/responses',endpoint='responses',resource_class_kwargs={'dao': 'ResponseDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/responses/name/<path:name>',endpoint='response',resource_class_kwargs={'dao' : 'ResponseDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/responses/name/<path:parameter_string>/generate_goal',endpoint='generate_goal',resource_class_kwargs={'dao' : 'ResponseDAO','post_method' : 'generate_goal','post_message' : 'Goal successfully generated'})
 
 # Risk routes
-api.add_resource(RiskController.RisksAPI, '/api/risks',endpoint='risks')
-api.add_resource(RiskController.RisksSummaryAPI, '/api/risks/summary',endpoint='riskssummary')
-api.add_resource(RiskController.RiskByNameAPI, '/api/risks/name/<path:name>',endpoint='risk')
-api.add_resource(
-  RiskController.RisksScoreByNameAPI,
-  '/api/risks/name/<path:name>/threat/<path:threat>/vulnerability/<path:vulnerability>/environment/<path:environment>',
-  '/api/risks/name/<path:name>/vulnerability/<path:vulnerability>/threat/<path:threat>/environment/<path:environment>',endpoint='risk_score')
-api.add_resource(
-  RiskController.RisksRatingByNameAPI,
-  '/api/risks/threat/<path:threat>/vulnerability/<path:vulnerability>/environment/<path:environment>',
-  '/api/risks/vulnerability/<path:vulnerability>/threat/<path:threat>/environment/<path:environment>',endpoint='risk_rating'
-)
-api.add_resource(RiskController.RiskAnalysisModelAPI, '/api/risks/model/environment/<path:environment>',endpoint='risk_model')
-api.add_resource(RiskController.RiskAnalysisModelNamesAPI, '/api/risks/model/environment/<path:environment>/names',endpoint='risk_model_name')
+api.add_resource(ObjectController.ObjectsAPI, '/api/risks',endpoint='risks',resource_class_kwargs={'dao': 'RiskDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/risks/name/<path:name>',endpoint='risk',resource_class_kwargs={'dao' : 'RiskDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/risks/summary',endpoint='riskssummary',resource_class_kwargs={'dao' : 'RiskDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndFourParametersAPI,'/api/risks/name/<path:p1>/threat/<path:p2>/vulnerability/<path:p3>/environment/<path:p4>',endpoint='risk_score_rtve',resource_class_kwargs={'dao': 'RiskDAO', 'get_method' : 'get_scores_by_rtve'})
+api.add_resource(ObjectController.ObjectsByMethodAndFourParametersAPI, '/api/risks/name/<path:p1>/vulnerability/<path:p2>/threat/<path:p3>/environment/<path:p4>',endpoint='risk_score_rvte', resource_class_kwargs={'dao' : 'RiskDAO','get_method' : 'get_scores_by_rvte'})
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI,'/api/risks/threat/<path:p1>/vulnerability/<path:p2>/environment/<path:p3>',endpoint='risk_rating_tve',resource_class_kwargs={'dao' : 'RiskDAO', 'get_method' : 'get_risk_rating_by_tve'})
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI,'/api/risks/vulnerability/<path:p1>/threat/<path:p2>/environment/<path:p3>',endpoint='risk_rating_vte',resource_class_kwargs={'dao' : 'RiskDAO', 'get_method' : 'get_risk_rating_by_vte'})
+api.add_resource(ObjectController.ModelByParameterAPI, '/api/risks/model/environment/<path:parameter_string>',endpoint='risk_model',resource_class_kwargs={'dao' : 'RiskDAO','get_method' : 'get_risk_analysis_model', 'path_parameters' : [('dimension_name',''),('object_name',''),('tagged','0'),('orientation','Vertical'),('layout','Hierarchical')], 'model_type' : 'risk'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/risks/model/environment/<path:parameter_string>/names',endpoint='risk_model_name',resource_class_kwargs={'dao' : 'RiskDAO','get_method' : 'risk_model_elements'})
 
 # Risk Levels routes
-api.add_resource(RiskLevelController.RiskLevelAPI, '/api/risk_level/asset/<path:name>',endpoint='risklevel')
-api.add_resource(RiskLevelController.RiskLevelByEnvironmentAPI, '/api/risk_level/asset/<path:name>/environment/<path:environment>',endpoint='risklevelbyenvironment')
-api.add_resource(RiskLevelController.RiskThreatLevelAPI, '/api/risk_level/asset/threat_type/<path:asset>/<path:threat>',endpoint='riskthreatlevel')
-api.add_resource(RiskLevelController.RiskThreatLevelByEnvironmentAPI, '/api/risk_level/asset/threat_type/<path:asset>/<path:threat>/environment/<path:environment>',endpoint='riskthreatlevelbyenvironment')
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/risk_level/asset/<path:parameter_string>',endpoint='risklevel',resource_class_kwargs={'dao' : 'RiskLevelDAO','get_method' : 'get_risk_level'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/risk_level/asset/<path:p1>/environment/<path:p2>',endpoint='risklevelbyenvironment',resource_class_kwargs={'dao' : 'RiskLevelDAO','get_method' : 'get_risk_level_by_environment'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/risk_level/asset/threat_type/<path:p1>/<path:p2>',endpoint='riskthreatlevel',resource_class_kwargs={'dao' : 'RiskLevelDAO','get_method' : 'get_risk_threat_level'})
+api.add_resource(ObjectController.ObjectsByMethodAndThreeParametersAPI, '/api/risk_level/asset/threat_type/<path:p1>/<path:p2>/environment/<path:p3>',endpoint='riskthreatlevelbyenvironment',resource_class_kwargs={'dao' : 'RiskLevelDAO','get_method' : 'get_risk_threat_level_by_environment'})
 
 # Role routes
-api.add_resource(RoleController.RolesAPI, '/api/roles',endpoint='roles')
-api.add_resource(RoleController.RolesByNameAPI, '/api/roles/name/<path:name>',endpoint='role')
-api.add_resource(RoleController.RoleEnvironmentPropertiesAPI, '/api/roles/name/<path:name>/properties',endpoint='role_properties')
+api.add_resource(ObjectController.ObjectsAPI, '/api/roles',endpoint='roles',resource_class_kwargs={'dao': 'RoleDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/roles/name/<path:name>',endpoint='role',resource_class_kwargs={'dao' : 'RoleDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/roles/name/<path:parameter_string>/properties',endpoint='role_properties',resource_class_kwargs={'dao' : 'RoleDAO','get_method' : 'get_role_props'})
 
 # Security pattern routes
-api.add_resource(SecurityPatternController.SecurityPatternsAPI, '/api/security_patterns', endpoint = 'securitypatterns')
-api.add_resource(SecurityPatternController.SecurityPatternByNameAPI, '/api/security_patterns/name/<path:name>', endpoint='securitypattern')
-api.add_resource(SecurityPatternController.SituateSecurityPatternAPI, '/api/security_patterns/name/<path:security_pattern_name>/environment/<path:environment_name>/situate', endpoint='situatesecuritypattern')
+api.add_resource(ObjectController.ObjectsAPI, '/api/security_patterns',endpoint='securitypatterns',resource_class_kwargs={'dao': 'SecurityPatternDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/security_patterns/name/<path:name>',endpoint='securitypattern',resource_class_kwargs={'dao' : 'SecurityPatternDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/security_patterns/name/<path:p1>/environment/<path:p2>/situate',endpoint='situatesecuritypattern',resource_class_kwargs={'dao' : 'SecurityPatternDAO','post_method' : 'situate_security_pattern','post_message' : 'Security Pattern successfully situated'})
 
 # Summary routes
-api.add_resource(SummaryController.SummaryAPI, '/api/summary/dimension/<path:dimension_name>/environment/<path:environment_name>',endpoint='summary')
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/summary/dimension/<path:p1>/environment/<path:p2>',endpoint='summary',resource_class_kwargs={'dao' : 'SummaryDAO','get_method' : 'get_summary'})
 
 # Task routes
-api.add_resource(TaskController.TasksAPI, '/api/tasks',endpoint='tasks')
-api.add_resource(TaskController.TaskByNameAPI, '/api/tasks/name/<path:name>',endpoint='task')
-api.add_resource(TaskController.TaskModelByNameAPI, '/api/tasks/model/environment/<path:environment>/task/<path:task>/misusecase/<path:misusecase>',endpoint='task_model')
-api.add_resource(TaskController.TaskLoadByNameAPI, '/api/tasks/name/<path:task>/environment/<path:environment>/load',endpoint='task_load')
-api.add_resource(TaskController.TaskHindranceByNameAPI, '/api/tasks/name/<path:task>/environment/<path:environment>/hindrance',endpoint='task_hindrance')
-api.add_resource(TaskController.TaskScoreByNameAPI, '/api/tasks/name/<path:task>/environment/<path:environment>/score',endpoint='task_score')
-api.add_resource(TaskController.MisusabilityModelAPI, '/api/tasks/model/misusability/<path:mc_name>/characteristic/<path:tc_name>',endpoint='misusability_model')
+api.add_resource(ObjectController.ObjectsAPI, '/api/tasks',endpoint='tasks',resource_class_kwargs={'dao': 'TaskDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/tasks/name/<path:name>',endpoint='task',resource_class_kwargs={'dao' : 'TaskDAO'})
+
+
+api.add_resource(ObjectController.ModelByThreeParametersAPI, '/api/tasks/model/environment/<path:p1>/task/<path:p2>/misusecase/<path:p3>',endpoint='task_model',resource_class_kwargs={'dao' : 'TaskDAO','get_method' : 'get_task_model','renderer' : 'dot', 'model_type' : 'task'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/tasks/name/<path:p1>/environment/<path:p2>/load',endpoint='task_load',resource_class_kwargs={'dao' : 'TaskDAO','get_method' : 'task_load_by_name_environment'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/tasks/name/<path:p1>/environment/<path:p2>/hindrance',endpoint='task_hindrance',resource_class_kwargs={'dao' : 'TaskDAO','get_method' : 'task_hindrance_by_name_environment'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/tasks/name/<path:p1>/environment/<path:p2>/score',endpoint='task_score',resource_class_kwargs={'dao' : 'TaskDAO','get_method' : 'task_score_by_name_environment'})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/tasks/model/misusability/<path:p1>/characteristic/<path:p2>',endpoint='misusability_model',resource_class_kwargs={'dao' : 'TaskDAO','get_method' : 'get_misusability_model','renderer' : 'dot','model_type' : 'misusability'})
 
 # Task Characteristic routes
-api.add_resource(TaskCharacteristicController.TaskCharacteristicsAPI, '/api/task_characteristics',endpoint='task_characteristics')
-api.add_resource(TaskCharacteristicController.TaskCharacteristicByNameAPI, '/api/task_characteristics/name/<path:name>',endpoint='task_characteristic')
+api.add_resource(ObjectController.ObjectsAPI, '/api/task_characteristics',endpoint='task_characteristics',resource_class_kwargs={'dao': 'TaskCharacteristicDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/task_characteristics/name/<path:name>',endpoint='task_characteristic',resource_class_kwargs={'dao' : 'TaskCharacteristicDAO'})
 
 # Template Asset routes
-api.add_resource(TemplateAssetController.TemplateAssetsAPI, '/api/template_assets',endpoint='template_assets')
-api.add_resource(TemplateAssetController.TemplateAssetByNameAPI, '/api/template_assets/name/<path:name>',endpoint='template_asset')
+api.add_resource(ObjectController.ObjectsAPI, '/api/template_assets',endpoint='template_assets',resource_class_kwargs={'dao': 'TemplateAssetDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/template_assets/name/<path:name>',endpoint='templateasset',resource_class_kwargs={'dao' : 'TemplateAssetDAO'})
 
 # Template Goal routes
-api.add_resource(TemplateGoalController.TemplateGoalsAPI, '/api/template_goals',endpoint='template_goals')
-api.add_resource(TemplateGoalController.TemplateGoalByNameAPI, '/api/template_goals/name/<path:name>',endpoint='template_goal')
+api.add_resource(ObjectController.ObjectsAPI, '/api/template_goals',endpoint='template_goals',resource_class_kwargs={'dao': 'TemplateGoalDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/template_goals/name/<path:name>',endpoint='templategoal',resource_class_kwargs={'dao' : 'TemplateGoalDAO'})
 
 # Template Requirement routes
-api.add_resource(TemplateRequirementController.TemplateRequirementsAPI, '/api/template_requirements',endpoint='template_requirements')
-api.add_resource(TemplateRequirementController.TemplateRequirementByNameAPI, '/api/template_requirements/name/<path:name>',endpoint='template_requirement')
+api.add_resource(ObjectController.ObjectsAPI, '/api/template_requirements',endpoint='template_requirements',resource_class_kwargs={'dao': 'TemplateRequirementDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/template_requirements/name/<path:name>',endpoint='template_requirement',resource_class_kwargs={'dao' : 'TemplateRequirementDAO'})
 
 # Threat routes
-api.add_resource(ThreatController.ThreatAPI, '/api/threats',endpoint='threats')
-api.add_resource(ThreatController.ThreatsSummaryAPI, '/api/threats/summary',endpoint='threatssummary')
-api.add_resource(ThreatController.ThreatByNameAPI, '/api/threats/name/<path:name>',endpoint='threat')
-api.add_resource(ThreatController.ThreatTypesAPI, '/api/threats/types',endpoint='threat_types')
-api.add_resource(ThreatController.ThreatTypeByNameAPI, '/api/threats/types/name/<path:name>',endpoint='threat_type')
-api.add_resource(ThreatController.ThreatModelAPI, '/api/threats/model/environment/<path:environment_name>',endpoint='threat_model')
+api.add_resource(ObjectController.ObjectsAPI, '/api/threats',endpoint='threats',resource_class_kwargs={'dao': 'ThreatDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/threats/name/<path:name>',endpoint='threat',resource_class_kwargs={'dao' : 'ThreatDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/threats/summary',endpoint='threatssummary',resource_class_kwargs={'dao' : 'ThreatDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/threats/model/environment/<path:parameter_string>',endpoint='threat_model',resource_class_kwargs={'dao' : 'ThreatDAO','get_method' : 'get_threat_model'})
 
 # Trace routes
-api.add_resource(TraceController.TracesAPI, '/api/traces',endpoint='traces')
-api.add_resource(TraceController.TraceByEnvironmentAPI, '/api/traces/environment/<path:environment_name>',endpoint='traces_environment')
-api.add_resource(TraceController.TraceDimensionsAPI, '/api/traces/dimensions/<path:dimension_name>/is_from/<path:is_from>',endpoint='trace_dimensions')
-api.add_resource(TraceController.TraceByNameAPI, '/api/traces/from_type/<path:from_object>/from_name/<path:from_name>/to_type/<path:to_object>/to_name/<path:to_name>',endpoint='traces_name')
+api.add_resource(ObjectController.ObjectsAPI, '/api/traces',endpoint='traces',resource_class_kwargs={'dao': 'TraceDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/traces/environment/<path:parameter_string>',endpoint='traces_environment', resource_class_kwargs={'dao' : 'TraceDAO', 'get_method' : 'get_traces'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/traces/dimensions/<path:p1>/is_from/<path:p2>',endpoint='trace_dimensions', resource_class_kwargs={'dao' : 'TraceDAO', 'get_method' : 'trace_dimensions'})
+api.add_resource(ObjectController.ObjectsByMethodAndFourParametersAPI, '/api/traces/from_type/<path:p1>/from_name/<path:p2>/to_type/<path:p3>/to_name/<path:p4>',endpoint='traces_name',resource_class_kwargs={'dao' : 'TraceDAO','del_method' : 'delete_trace'})
 
 # Trust Boundary routes
-api.add_resource(TrustBoundaryController.TrustBoundariesAPI, '/api/trust_boundaries',endpoint='trustboundaries')
-api.add_resource(TrustBoundaryController.TrustBoundaryByNameAPI, '/api/trust_boundaries/name/<path:trust_boundary_name>',endpoint='trustboundary')
+api.add_resource(ObjectController.ObjectsAPI, '/api/trust_boundaries',endpoint='trustboundaries',resource_class_kwargs={'dao': 'TrustBoundaryDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/trust_boundaries/name/<path:name>',endpoint='trustboundary',resource_class_kwargs={'dao' : 'TrustBoundaryDAO'})
 
 # Upload controller
 api.add_resource(UploadController.UploadImageAPI, '/api/upload/image',endpoint='upload')
 
 # Use Case routes
-api.add_resource(UseCaseController.UseCasesAPI, '/api/usecases',endpoint='usecases')
-api.add_resource(UseCaseController.UseCasesSummaryAPI, '/api/usecases/summary',endpoint='usecasessummary')
-api.add_resource(UseCaseController.UseCaseByNameAPI, '/api/usecases/name/<path:name>',endpoint='usecase')
-api.add_resource(UseCaseController.UseCaseRequirementsByNameAPI, '/api/usecases/name/<path:usecase_name>/requirements',endpoint='usecaserequirements')
-api.add_resource(UseCaseController.UseCaseGoalsByNameAPI, '/api/usecases/name/<path:usecase_name>/environment/<path:environment_name>/goals',endpoint='usecasegoals')
+api.add_resource(ObjectController.ObjectsAPI, '/api/usecases',endpoint='usecases',resource_class_kwargs={'dao': 'UseCaseDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/usecases/name/<path:name>',endpoint='usecase',resource_class_kwargs={'dao' : 'UseCaseDAO'})
+api.add_resource(ObjectController.ObjectsSummaryAPI, '/api/usecases/summary',endpoint='usecasessummary',resource_class_kwargs={'dao' : 'UseCaseDAO'})
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/usecases/name/<path:parameter_string>/requirements',endpoint='usecaserequirements',resource_class_kwargs={'dao' : 'UseCaseDAO', 'get_method' : 'get_usecase_requirements'})
+api.add_resource(ObjectController.ObjectsByMethodAndTwoParametersAPI, '/api/usecases/name/<path:p1>/environment/<path:p2>/goals',endpoint='usecasegoals', resource_class_kwargs={'dao' : 'UseCaseDAO', 'get_method' : 'get_usecase_goals'})
 
 # User goal routes
-api.add_resource(UserGoalController.UserGoalsAPI, '/api/user_goals',endpoint='user_goals')
-api.add_resource(UserGoalController.UserGoalByNameAPI, '/api/user_goals/name/<path:name>',endpoint='user_goal')
-api.add_resource(UserGoalController.UserGoalModelAPI, '/api/user_goals/model/environment/<path:environment_name>/filter_name/<path:filter_element>',endpoint='usergoalmodel')
+api.add_resource(ObjectController.ObjectsAPI, '/api/user_goals',endpoint='user_goals',resource_class_kwargs={'dao': 'UserGoalDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/user_goals/name/<path:name>',endpoint='usergoal',resource_class_kwargs={'dao' : 'UserGoalDAO'})
+api.add_resource(ObjectController.ModelByTwoParametersAPI, '/api/user_goals/model/environment/<path:p1>/filter_name/<path:p2>',endpoint='usergoalmodel',resource_class_kwargs={'dao' : 'UserGoalDAO','get_method' : 'get_user_goal_model','renderer' : 'dot'})
 
 # Validation route
-api.add_resource(ValidationController.ValidationAPI, '/api/validation/environment/<path:name>',endpoint='environmentvalidation')
+api.add_resource(ObjectController.ObjectsByMethodAndParameterAPI, '/api/validation/environment/<path:parameter_string>',endpoint='environmentvalidation',resource_class_kwargs={'dao' : 'ValidationDAO','get_method' : 'model_validation'})
 
 # Value Type routes
-api.add_resource(ValueTypeController.ValueTypesAPI, '/api/value_types/type/<path:type_name>/environment/<path:environment_name>',endpoint='value_types')
-api.add_resource(ValueTypeController.ValueTypesByNameAPI, '/api/value_types/type/<path:type_name>/environment/<path:environment_name>/name/<path:object_name>',endpoint='value_type')
-api.add_resource(ValueTypeController.ValueTypesCreateAPI, '/api/value_types/',endpoint='create_value_type')
+api.add_resource(ObjectController.ObjectsByTwoParametersAPI, '/api/value_types/type/<path:p1>/environment/<path:p2>',endpoint='value_types',resource_class_kwargs={'dao' : 'ValueTypeDAO'})
+api.add_resource(ObjectController.ObjectByThreeParametersAPI, '/api/value_types/type/<path:p1>/environment/<path:p2>/name/<path:p3>',endpoint='value_type',resource_class_kwargs={'dao' : 'ValueTypeDAO'})
+api.add_resource(ObjectController.ObjectsAPI, '/api/value_types/',endpoint='create_value_types',resource_class_kwargs={'dao': 'ValueTypeDAO'})
 
 # Version route
-api.add_resource(VersionController.VersionAPI, '/api/version',endpoint='version')
+api.add_resource(ObjectController.ObjectsByMethodAPI, '/api/version',endpoint='version',resource_class_kwargs={'dao' : 'VersionDAO','get_method' : 'cairis_version'})
 
 # Vulnerability routes
-api.add_resource(VulnerabilityController.VulnerabilityAPI, '/api/vulnerabilities',endpoint='vulnerabilities')
-api.add_resource(VulnerabilityController.VulnerabilityByIdAPI, '/api/vulnerabilities/id/<int:id>',endpoint='vulnerability_id')
-api.add_resource(VulnerabilityController.VulnerabilityByNameAPI, '/api/vulnerabilities/name/<path:name>',endpoint='vulnerability')
-api.add_resource(VulnerabilityController.VulnerabilityTypesAPI, '/api/vulnerabilities/types',endpoint='vulnerability_types')
-api.add_resource(VulnerabilityController.VulnerabilityTypeByNameAPI, '/api/vulnerabilities/types/name/<path:name>',endpoint='vulnerability_type_name')
+api.add_resource(ObjectController.ObjectsAPI, '/api/vulnerabilities',endpoint='vulnerabilities',resource_class_kwargs={'dao': 'VulnerabilityDAO'})
+api.add_resource(ObjectController.ObjectByNameAPI, '/api/vulnerabilities/name/<path:name>',endpoint='vulnerabilitiy',resource_class_kwargs={'dao' : 'VulnerabilityDAO'})

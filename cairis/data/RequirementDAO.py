@@ -30,9 +30,36 @@ __author__ = 'Robin Quetin, Shamal Faily'
 
 class RequirementDAO(CairisDAO):
   def __init__(self, session_id):
-    CairisDAO.__init__(self, session_id)
+    CairisDAO.__init__(self, session_id, 'requirement')
 
-  def get_requirements(self, constraint_id='', is_asset=True, ordered=False):
+  def get_requirements_by_asset(self, name, pathValues):
+    ordered = pathValues[0]
+    constraint_id = name
+    assetName  = ''
+    environmentName = None
+    return self.get_requirements([pathValues[0],constraint_id,assetName,environmentName])
+
+  def get_requirements_by_environment(self, name, pathValues):
+    ordered = pathValues[0]
+    constraint_id = name
+    assetName  = None
+    environmentName = ''
+    return self.get_requirements([pathValues[0],constraint_id,assetName,environmentName])
+
+  def get_requirements(self, pathValues):
+    ordered = pathValues[0]
+    constraint_id = pathValues[1]
+    asset_name = pathValues[2]
+    environment_name = pathValues[3]
+    
+    ordered = False
+    if (ordered == 1):
+      ordered = True
+    
+    is_asset = False
+    if ((asset_name == None and environment_name == None) or (asset_name != None)):
+      is_asset = True
+
     try:
       if (constraint_id != ''):
         if (is_asset == True):
@@ -61,7 +88,7 @@ class RequirementDAO(CairisDAO):
       reqList.append(self.simplify(r))
     return reqList
 
-  def get_requirement_by_name(self, name):
+  def get_object_by_name(self, name):
     try:
       req = self.db_proxy.getRequirement(name)
       if (req == None):
@@ -78,7 +105,10 @@ class RequirementDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def add_requirement(self, requirement, asset_name=None, environment_name=None):
+  def add_requirement(self, requirement, pathValues):
+    asset_name = pathValues[2]
+    environment_name = pathValues[3]
+
     try:
       self.db_proxy.nameCheck(requirement.theName, 'requirement')
     except ARMException as ex:
@@ -107,7 +137,7 @@ class RequirementDAO(CairisDAO):
 
     return new_id
 
-  def delete_requirement(self, name=None):
+  def delete_object(self, name=None):
     if name is not None:
       req = self.db_proxy.getRequirement(name)
       reqReference = req.asset()
@@ -117,7 +147,7 @@ class RequirementDAO(CairisDAO):
       self.close()
       raise MissingParameterHTTPError(param_names=['name'])
 
-  def update_requirement(self, requirement, name=None):
+  def update_object(self, requirement, name=None):
     old_requirement = None
     old_reference = None
     if name is not None:
@@ -185,8 +215,14 @@ class RequirementDAO(CairisDAO):
     del obj.theAsset
     return obj
 
-  def get_concept_map_model(self, environment_name, requirement_name, isAsset):
+  def get_concept_map_model(self, environment_name, requirement_name, pathValues):
     fontName, fontSize, apFontName = get_fonts(session_id=self.session_id)
+    isAsset = pathValues[0]
+    if (isAsset == '1'):
+      isAsset = True
+    else:
+      isAsset = False
+
     try:
       associationDictionary = self.db_proxy.conceptMapModel(environment_name, requirement_name)
       associations = GraphicalConceptMapModel(list(associationDictionary.values()), environment_name, requirement_name, isAsset, True, db_proxy=self.db_proxy, font_name=fontName, font_size=fontSize)
@@ -203,6 +239,12 @@ class RequirementDAO(CairisDAO):
       raise ARMHTTPError(ex)
     except Exception as ex:
       print(ex)
+
+  def get_environment_requirement_names(self,name, pathValues = []):
+    return self.get_dimension_requirement_names('environment',name)
+
+  def get_asset_requirement_names(self,name, pathValues = []):
+    return self.get_dimension_requirement_names('asset',name)
 
   def get_dimension_requirement_names(self, dimName, objtName):
     try:

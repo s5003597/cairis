@@ -25,14 +25,14 @@ class Threat(ObjectValidator.ObjectValidator):
   def __init__(self,threatId,threatName,threatType,threatMethod,tags,cProps):
     ObjectValidator.ObjectValidator.__init__(self)
     self.theId = threatId
-    self.theThreatName = threatName
+    self.theName = threatName
     self.theType = threatType
     self.theMethod = threatMethod
     self.theTags = tags
     self.theEnvironmentProperties = cProps
     self.theEnvironmentDictionary = {}
     self.theThreatPropertyDictionary = {}
-    for p in self.theEnvironmentProperties:
+    for p in cProps:
       environmentName = p.name()
       self.theEnvironmentDictionary[environmentName] = p
       self.theThreatPropertyDictionary[environmentName] = PropertyHolder(p.properties(),p.rationale())
@@ -45,7 +45,7 @@ class Threat(ObjectValidator.ObjectValidator):
     self.likelihoodLookup['Frequent'] = 5
 
   def id(self): return self.theId
-  def name(self): return self.theThreatName
+  def name(self): return self.theName
   def type(self): return self.theType
   def method(self): return self.theMethod
   def tags(self): return self.theTags

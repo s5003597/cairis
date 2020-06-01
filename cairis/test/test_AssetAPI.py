@@ -94,11 +94,11 @@ class AssetAPITests(CairisDaemonTestCase):
     else:
       assets = json_deserialize(rv.data)
     self.assertIsNotNone(assets, 'No results after deserialization')
-    self.assertIsInstance(assets, dict, 'The result is not a dictionary as expected')
-    self.assertGreater(len(assets), 0, 'No assets in the dictionary')
-    self.assertIsInstance(list(assets.values())[0], dict)
+    self.assertIsInstance(assets, list, 'The result is not a list as expected')
+    self.assertGreater(len(assets), 0, 'No assets in the list')
+    self.assertIsInstance(assets[0], dict)
     self.logger.info('[%s] Assets found: %d', method, len(assets))
-    self.logger.info('[%s] First asset: %s\n', method, list(assets.values())[0]['theName'])
+    self.logger.info('[%s] First asset: %s\n', method, assets[0]['theName'])
 
   def test_get_all_summary(self):
     method = 'test_get_all_summary'
@@ -136,10 +136,7 @@ class AssetAPITests(CairisDaemonTestCase):
     method = 'test_get_name'
     url = '/api/assets/name/invalidname?session_id=test'
     rv = self.app.get(url)
-    if (sys.version_info > (3,)):
-      msg = json_deserialize(rv.data.decode('utf-8'))
-    else:
-      msg = json_deserialize(rv.data)
+    msg = json_deserialize(rv.data.decode('utf-8'))
     self.assertIsNotNone(msg, 'No results after deserialization')
     self.assertEqual(msg['code'],404)
    
@@ -240,7 +237,7 @@ class AssetAPITests(CairisDaemonTestCase):
     self.assertIsInstance(json_resp, dict, 'The response cannot be converted to a dictionary')
     message = json_resp.get('message', None)
     self.assertIsNotNone(message, 'No message in response')
-    self.logger.info('[%s] Message: %s\n', method, message)
+    self.assertEqual(message,'Test asset type deleted')
 
   def test_types_post(self):
     method = 'test_types_post'
@@ -250,7 +247,6 @@ class AssetAPITests(CairisDaemonTestCase):
     new_asset_type_body = jsonpickle.encode(json_dict, unpicklable=False)
     self.logger.info('JSON data: %s', new_asset_type_body)
 
-    self.app.delete('/api/assets/types/name/%s?session_id=test' % quote(self.prepare_new_asset_type().theName))
     rv = self.app.post(url, content_type='application/json', data=new_asset_type_body)
     if (sys.version_info > (3,)):
       postResponse = rv.data.decode('utf-8')
@@ -260,9 +256,16 @@ class AssetAPITests(CairisDaemonTestCase):
     json_resp = jsonpickle.decode(postResponse)
     self.assertIsNotNone(json_resp, 'No results after deserialization')
     ackMsg = json_resp.get('message', None)
-    self.assertEqual(ackMsg, 'Asset type successfully added')
+    self.assertEqual(ackMsg,'Test asset type created')
 
     rv = self.app.delete('/api/assets/types/name/%s?session_id=test' % quote(self.prepare_new_asset_type().theName))
+    delResponse = rv.data.decode('utf-8')
+    self.assertIsNotNone(delResponse, 'No response')
+    json_resp = jsonpickle.decode(delResponse)
+    self.assertIsInstance(json_resp, dict, 'The response cannot be converted to a dictionary')
+    message = json_resp.get('message', None)
+    self.assertIsNotNone(message, 'No message in response')
+    self.assertEqual(message,'Test asset type deleted')
 
   def test_types_put(self):
     method = 'test_types_put'
@@ -282,7 +285,7 @@ class AssetAPITests(CairisDaemonTestCase):
     json_resp = jsonpickle.decode(postResponse)
     self.assertIsNotNone(json_resp, 'No results after deserialization')
     ackMsg = json_resp.get('message', None)
-    self.assertIsNotNone(ackMsg, 'Asset type successfully updated')
+    self.assertEqual(ackMsg,'Test asset type created')
 
     type_to_update = self.prepare_new_asset_type()
     type_to_update.theName = 'Edited test asset type'
@@ -300,7 +303,7 @@ class AssetAPITests(CairisDaemonTestCase):
     message = json_resp.get('message', None)
     self.assertIsNotNone(message, 'No message in response')
     self.logger.info('[%s] Message: %s', method, message)
-    self.assertGreater(message.find('successfully updated'), -1, 'The asset was not successfully updated')
+    self.assertEqual(message,'Edited test asset type updated')
 
     rv = self.app.get('/api/assets/types/name/%s?session_id=test' % quote(type_to_update.theName))
     if (sys.version_info > (3,)):

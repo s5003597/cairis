@@ -33,9 +33,15 @@ __author__ = 'Robin Quetin, Shamal Faily'
 
 class GoalDAO(CairisDAO):
   def __init__(self, session_id):
-    CairisDAO.__init__(self, session_id)
+    CairisDAO.__init__(self, session_id, 'goal')
 
-  def get_goals(self, constraint_id=-1, coloured=False, simplify=True):
+  def get_objects(self, pathValues):
+    constraint_id = pathValues[0]
+    coloured = pathValues[1]
+    if (coloured == '1'):
+      coloured = True
+    else:
+      coloured = False
     try:
       if coloured:
         goals = self.db_proxy.getColouredGoals(constraint_id)
@@ -45,13 +51,13 @@ class GoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-    if simplify:
-      for key, value in list(goals.items()):
-        goals[key] = self.simplify(value)
+    goalKeys = sorted(goals.keys())
+    goalList = []
+    for key in goalKeys:
+      goalList.append(self.simplify(goals[key]))
+    return goalList
 
-    return goals
-
-  def get_goals_summary(self):
+  def get_objects_summary(self):
     try:
       goals = self.db_proxy.getGoalsSummary()
     except DatabaseProxyException as ex:
@@ -60,22 +66,25 @@ class GoalDAO(CairisDAO):
     return goals
 
 
-  def get_goal_by_name(self, name, coloured=False, simplify=True):
+  def get_object_by_name(self, name, pathValues):
+    coloured = pathValues[1]
+    if (coloured == '1'):
+      coloured = True
+    else:
+      coloured = False
     try:
-      found_goal = None
       goalId = self.db_proxy.getDimensionId(name,'goal')
-      goals = self.get_goals(goalId,coloured=coloured, simplify=False)
-      if goals is not None:
-        found_goal = goals.get(name)
+      if coloured:
+        goals = self.db_proxy.getColouredGoals(goalId)
+      else:
+        goals = self.db_proxy.getGoals(goalId)
+
+      found_goal = goals.get(name,None)
       if found_goal is None:
         self.close()
         raise ObjectNotFoundHTTPError('The provided goal name')
-      if simplify:
-        found_goal = self.simplify(found_goal)
+      found_goal = self.simplify(found_goal)
       return found_goal
-    except ObjectNotFound as ex:
-      self.close()
-      raise ObjectNotFoundHTTPError('The provided goal name')
     except DatabaseProxyException as ex:
       self.close()
       raise ARMHTTPError(ex)
@@ -83,13 +92,8 @@ class GoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-
-  def add_goal(self, goal):
-    goalParams = GoalParameters(
-            goalName=goal.theName,
-            goalOrig=goal.theOriginator,
-            tags=goal.theTags,
-            properties=goal.theEnvironmentProperties)
+  def add_object(self, goal, pathValues = []):
+    goalParams = GoalParameters(goalName=goal.theName,goalOrig=goal.theOriginator,tags=goal.theTags,properties=goal.theEnvironmentProperties)
     try:
       if not self.check_existing_goal(goal.theName):
         self.db_proxy.addGoal(goalParams)
@@ -100,13 +104,8 @@ class GoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def update_goal(self, goal, name):
-    params = GoalParameters(
-            goalName=goal.theName,
-            goalOrig=goal.theOriginator,
-            tags=goal.theTags,
-            properties=goal.theEnvironmentProperties)
-
+  def update_object(self, goal, name, pathValues = []):
+    params = GoalParameters(goalName=goal.theName,goalOrig=goal.theOriginator,tags=goal.theTags,properties=goal.theEnvironmentProperties)
     try:
       goalId = self.db_proxy.getDimensionId(name,'goal')
       params.setId(goalId)
@@ -118,7 +117,7 @@ class GoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def delete_goal(self, name):
+  def delete_object(self, name, pathValues = []):
     try:
       goalId = self.db_proxy.getDimensionId(name,'goal')
       self.db_proxy.deleteGoal(goalId)
@@ -142,13 +141,19 @@ class GoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def get_goal_model(self, environment_name,goal_name,usecase_name,is_top_level):
+  def get_goal_model(self, environment_name,goal_name,usecase_name, pathValues):
     fontName, fontSize, apFontName = get_fonts(session_id=self.session_id)
+    is_top_level = pathValues[0]
+    if goal_name == 'all':
+      goal_name = ''
+    if usecase_name == 'all':
+      usecase_name = ''
     try:
       associationDictionary = {}
       goalFilter = 0
       ucFilter = 0
-      if goal_name != '': goalFilter = 1
+      if goal_name != '': 
+        goalFilter = 1
       if usecase_name != '': 
         ucFilter = 1
         goal_name = usecase_name
@@ -160,8 +165,10 @@ class GoalDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def get_responsibility_model(self, environment_name, role_name):
+  def get_responsibility_model(self, environment_name, role_name, pathValues = []):
     fontName, fontSize, apFontName = get_fonts(session_id=self.session_id)
+    if role_name == 'all':
+      role_name = ''
     try:
       associationDictionary = self.db_proxy.responsibilityModel(environment_name, role_name)
       associations = KaosModel(list(associationDictionary.values()), environment_name, 'responsibility',goalName=role_name,db_proxy=self.db_proxy, font_name=fontName,font_size=fontSize)
@@ -400,7 +407,7 @@ class GoalDAO(CairisDAO):
     del goal.theColour
     return goal
 
-  def get_goal_names(self, environment=''):
+  def get_goal_names(self, environment='', pathValues = []):
     try:
       goal_names = self.db_proxy.getDimensionNames('goal', environment)
       return goal_names

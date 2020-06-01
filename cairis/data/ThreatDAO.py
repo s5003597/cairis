@@ -37,7 +37,7 @@ __author__ = 'Robin Quetin, Shamal Faily'
 
 class ThreatDAO(CairisDAO):
   def __init__(self, session_id):
-    CairisDAO.__init__(self, session_id)
+    CairisDAO.__init__(self, session_id, 'threat')
     self.prop_dict = {
       0:'None',
       1:'Low',
@@ -61,7 +61,7 @@ class ThreatDAO(CairisDAO):
     for key, value in list(self.prop_dict.items()):
       self.rev_prop_dict[value] = key
 
-  def get_threats(self, constraint_id=-1):
+  def get_objects(self, constraint_id=-1):
     try:
       threats = self.db_proxy.getThreats(constraint_id)
     except DatabaseProxyException as ex:
@@ -74,7 +74,7 @@ class ThreatDAO(CairisDAO):
       threatList.append(self.simplify(threats[key]))
     return threatList
 
-  def get_threats_summary(self):
+  def get_objects_summary(self):
     try:
       thrs = self.db_proxy.getThreatsSummary()
     except DatabaseProxyException as ex:
@@ -82,7 +82,7 @@ class ThreatDAO(CairisDAO):
       raise ARMHTTPError(ex)
     return thrs
 
-  def get_threat_by_name(self, name, simplify=True):
+  def get_object_by_name(self, name, simplify=True):
     found_threat = None
     try:
       threats = self.db_proxy.getThreats()
@@ -102,9 +102,9 @@ class ThreatDAO(CairisDAO):
 
     return found_threat
     
-  def add_threat(self, threat):
+  def add_object(self, threat):
     threat_params = ThreatParameters(
-      threatName=threat.theThreatName,
+      threatName=threat.theName,
       thrType=threat.theType,
       thrMethod=threat.theMethod,
       tags=threat.theTags,
@@ -112,10 +112,10 @@ class ThreatDAO(CairisDAO):
     )
 
     try:
-      if not self.check_existing_threat(threat.theThreatName):
+      if not self.check_existing_threat(threat.theName):
         self.db_proxy.addThreat(threat_params)
       else:
-        raise OverwriteNotAllowedHTTPError(obj_name=threat.theThreatName)
+        raise OverwriteNotAllowedHTTPError(obj_name=threat.theName)
     except DatabaseProxyException as ex:
       self.close()
       raise ARMHTTPError(ex)
@@ -123,9 +123,9 @@ class ThreatDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def update_threat(self, threat, name):
+  def update_object(self, threat, name):
     threat_params = ThreatParameters(
-      threatName=threat.theThreatName,
+      threatName=threat.theName,
       thrType=threat.theType,
       thrMethod=threat.theMethod,
       tags=threat.theTags,
@@ -142,103 +142,10 @@ class ThreatDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def delete_threat(self, name):
+  def delete_object(self, name):
     try:
       threatId = self.db_proxy.getDimensionId(name,'threat')
       self.db_proxy.deleteThreat(threatId)
-    except DatabaseProxyException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-    except ARMException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-
-  def get_threat_types(self, environment_name=''):
-    try:
-      threat_types = self.db_proxy.getValueTypes('threat_type', environment_name)
-      return threat_types
-    except DatabaseProxyException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-    except ARMException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-
-  def get_threat_type_by_name(self, name, environment_name=''):
-    found_type = None
-    threat_types = self.get_threat_types(environment_name=environment_name)
-
-    if threat_types is None or len(threat_types) < 1:
-      self.close()
-      raise ObjectNotFoundHTTPError('Threat types')
-
-    idx = 0
-    while found_type is None and idx < len(threat_types):
-      if threat_types[idx].theName == name:
-        found_type = threat_types[idx]
-      idx += 1
-
-    if found_type is None:
-      self.close()
-      raise ObjectNotFoundHTTPError('The provided threat type name')
-
-    return found_type
-
-  def add_threat_type(self, threat_type, environment_name=''):
-    assert isinstance(threat_type, ValueType)
-    type_exists = self.check_existing_threat_type(threat_type.theName, environment_name=environment_name)
-
-    if type_exists:
-      self.close()
-      raise OverwriteNotAllowedHTTPError(obj_name='The threat type')
-
-    params = ValueTypeParameters(
-      vtName=threat_type.theName,
-      vtDesc=threat_type.theDescription,
-      vType='threat_type',
-      envName=environment_name,
-      vtScore=threat_type.theScore,
-      vtRat=threat_type.theRationale
-    )
-
-    try:
-      self.db_proxy.addValueType(params)
-    except DatabaseProxyException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-    except ARMException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-
-  def update_threat_type(self, threat_type, name, environment_name=''):
-    assert isinstance(threat_type, ValueType)
-
-    found_type = self.get_threat_type_by_name(name, environment_name)
-
-    params = ValueTypeParameters(
-      vtName=threat_type.theName,
-      vtDesc=threat_type.theDescription,
-      vType='threat_type',
-      envName=environment_name,
-      vtScore=threat_type.theScore,
-      vtRat=threat_type.theRationale
-    )
-    params.setId(found_type.theId)
-
-    try:
-      self.db_proxy.updateValueType(params)
-    except DatabaseProxyException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-    except ARMException as ex:
-      self.close()
-      raise ARMHTTPError(ex)
-
-  def delete_threat_type(self, name, environment_name=''):
-    found_type = self.get_threat_type_by_name(name, environment_name)
-
-    try:
-      self.db_proxy.deleteThreatType(found_type.theId)
     except DatabaseProxyException as ex:
       self.close()
       raise ARMHTTPError(ex)
@@ -269,7 +176,7 @@ class ThreatDAO(CairisDAO):
     return els
 
 
-  def get_threat_model(self,environment_name):
+  def get_threat_model(self,environment_name, pathValues = []):
     try:
       tm = ThreatModelModel()
       tm.theEntities = self.buildThreatModelElement(self.db_proxy.threatenedEntities(environment_name))
@@ -294,14 +201,6 @@ class ThreatDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def check_existing_threat_type(self, name, environment_name):
-    try:
-      self.get_threat_type_by_name(name, environment_name)
-      return True
-    except ObjectNotFoundHTTPError:
-      self.db_proxy.reconnect(session_id=self.session_id)
-      return False
-    
   def from_json(self, request):
     json = request.get_json(silent=True)
     if json is False or json is None:

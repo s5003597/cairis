@@ -29,6 +29,9 @@ from cairis.core.Step import Step
 from cairis.core.Steps import Steps
 from cairis.core.UseCaseEnvironmentProperties import UseCaseEnvironmentProperties
 from cairis.core.UseCaseParameters import UseCaseParameters
+from cairis.core.ObstacleEnvironmentProperties import ObstacleEnvironmentProperties
+from cairis.core.ObstacleParameters import ObstacleParameters
+from cairis.core.UseCaseParameters import UseCaseParameters
 from cairis.core.DataFlowParameters import DataFlowParameters
 from cairis.mio.ModelImport import importDataflowsFile
 
@@ -77,6 +80,12 @@ class DataFlowTest(unittest.TestCase):
       iap = AssetParameters(iAsset["theName"],iAsset["theShortCode"],iAsset["theDescription"],iAsset["theSignificance"],iAsset["theType"],"0","N/A",[],[],iaeps)
       b.dbProxy.addAsset(iap)
 
+    for iObstacle in d['obstacles']:
+      ioep = ObstacleEnvironmentProperties(iObstacle["theEnvironmentProperties"][0],iObstacle["theEnvironmentProperties"][1],iObstacle["theEnvironmentProperties"][2],iObstacle["theEnvironmentProperties"][3])
+      iop = ObstacleParameters(iObstacle["theName"],iObstacle["theOriginator"],[],[ioep])
+      b.dbProxy.addObstacle(iop)
+
+
   def setUp(self):
     f = open(os.environ['CAIRIS_SRC'] + '/test/dataflow.json')
     d = json.load(f)
@@ -84,21 +93,30 @@ class DataFlowTest(unittest.TestCase):
     self.dfJson = d['dataflows'][0]
 
   def testAddDataFlow(self):
-    idfp = DataFlowParameters(self.dfJson['theName'],self.dfJson['theEnvironmentName'],self.dfJson['theFromName'],self.dfJson['theFromType'],self.dfJson['theToName'],self.dfJson['theToType'],self.dfJson['theAssets'])
+    dfObs = []
+    for dfo in self.dfJson['theObstacles']:
+      dfObs.append((dfo['theName'],dfo['theKeyword'],dfo['theContext']))
+    idfp = DataFlowParameters(self.dfJson['theName'],self.dfJson['theType'],self.dfJson['theEnvironmentName'],self.dfJson['theFromName'],self.dfJson['theFromType'],self.dfJson['theToName'],self.dfJson['theToType'],self.dfJson['theAssets'],dfObs,self.dfJson['theTags'])
     b = Borg()
     b.dbProxy.addDataFlow(idfp)
     odfs = b.dbProxy.getDataFlows()
     odf = odfs[0]
     self.assertEqual(idfp.name(),odf.name())
+    self.assertEqual(idfp.type(),odf.type())
     self.assertEqual(idfp.environment(),odf.environment())
     self.assertEqual(idfp.fromName(),odf.fromName())
     self.assertEqual(idfp.fromType(),odf.fromType())
     self.assertEqual(idfp.toName(),odf.toName())
     self.assertEqual(idfp.toType(),odf.toType())
     self.assertEqual(idfp.assets(),odf.assets())
+    self.assertEqual(idfp.obstacles(),odf.obstacles())
+    self.assertEqual(idfp.tags(),odf.tags())
 
   def testUpdateDataFlow(self):
-    idfp = DataFlowParameters(self.dfJson['theName'],self.dfJson['theEnvironmentName'],self.dfJson['theFromName'],self.dfJson['theFromType'],self.dfJson['theToName'],self.dfJson['theToType'],self.dfJson['theAssets'])
+    dfObs = []
+    for dfo in self.dfJson['theObstacles']:
+      dfObs.append((dfo['theName'],dfo['theKeyword'],dfo['theContext']))
+    idfp = DataFlowParameters(self.dfJson['theName'],self.dfJson['theType'],self.dfJson['theEnvironmentName'],self.dfJson['theFromName'],self.dfJson['theFromType'],self.dfJson['theToName'],self.dfJson['theToType'],self.dfJson['theAssets'],dfObs,self.dfJson['theTags'])
     b = Borg()
     b.dbProxy.addDataFlow(idfp)
     idfp.theName = 'Authenticate'
@@ -106,15 +124,25 @@ class DataFlowTest(unittest.TestCase):
     odfs = b.dbProxy.getDataFlows()
     odf = odfs[0]
     self.assertEqual(idfp.name(),odf.name())
+    self.assertEqual(idfp.type(),odf.type())
     self.assertEqual(idfp.environment(),odf.environment())
     self.assertEqual(idfp.fromName(),odf.fromName())
     self.assertEqual(idfp.fromType(),odf.fromType())
     self.assertEqual(idfp.toName(),odf.toName())
     self.assertEqual(idfp.toType(),odf.toType())
     self.assertEqual(idfp.assets(),odf.assets())
+    self.assertEqual(idfp.obstacles(),odf.obstacles())
+    self.assertEqual(idfp.tags(),odf.tags())
 
   def testImportDataflows(self):
     self.assertEqual(importDataflowsFile(os.environ['CAIRIS_SRC'] + '/test/testdataflow.xml'),'Imported 1 dataflow. Imported 0 trust boundaries.')
+
+  def testImportDataflowsWithoutTypee(self):
+    self.assertEqual(importDataflowsFile(os.environ['CAIRIS_SRC'] + '/test/testdataflow_withouttype.xml'),'Imported 1 dataflow. Imported 0 trust boundaries.')
+    b = Borg()
+    odfs = b.dbProxy.getDataFlows()
+    odf = odfs[0]
+    self.assertEqual(odf.type(),'Information')
 
   def testExportDataflows(self):
     importDataflowsFile(os.environ['CAIRIS_SRC'] + '/test/testdataflow.xml')

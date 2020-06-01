@@ -21,7 +21,15 @@ import pydot
 from cairis.core.Borg import Borg
 from cairis.core.ARM import *
 
-class DataFlowDiagram:
+def edgeColour(dfType):
+  if dfType == 'Control':
+    return 'green'
+  elif dfType == 'Feedback':
+    return 'brown'
+  else:
+    return 'black'
+
+class ControlStructure:
   def __init__(self,associations, envName,db_proxy=None,font_name=None, font_size=None):
     self.theAssociations = associations
     self.theEnvironmentName = envName
@@ -36,33 +44,20 @@ class DataFlowDiagram:
       self.fontSize = b.fontSize
 
     self.theGraph = pydot.Dot()
-    self.theGraph.set_graph_defaults(rankdir='LR')
-    self.theGraphName = b.tmpDir + '/' + 'dfd.dot'
-    self.theClusters = {}
-    self.tbDict = {}
+    self.theGraph.set_graph_defaults(rankdir='TB')
+    self.theGraphName = b.tmpDir + '/' + 'cs.dot'
 
   def size(self):
     return len(self.theAssociations)
 
   def buildNode(self,dimName,objtName):
-    targetGraph = self.theGraph
-    if objtName in self.tbDict:
-      targetGraph = self.theClusters[self.tbDict[objtName]]
     
-    if (dimName == 'process'):
-      objtUrl = 'usecase#' + objtName
-    else:
+    if (dimName == 'entity'):
       objtUrl = 'asset#' + objtName
-
-    if (dimName == 'process'):
-
-      targetGraph.add_node(pydot.Node(objtName,shape='rectangle',margin=0,style='rounded',fontname=self.fontName,fontsize=self.fontSize,URL=objtUrl))
-    elif (dimName == 'entity'):
-      targetGraph.add_node(pydot.Node(objtName,shape='rectangle',margin=0,style='filled',fillcolor='white',fontname=self.fontName,fontsize=self.fontSize,URL=objtUrl))
-
-    elif (dimName == 'datastore'):
-      dsLbl = '<<TABLE SIDES="TB" CELLBORDER="0"><TR><TD>' + objtName + '</TD></TR></TABLE>>'
-      targetGraph.add_node(pydot.Node(objtName,label=dsLbl,shape='plaintext',style='filled',fillcolor='white',margin=0,fontname=self.fontName,fontsize=self.fontSize,URL=objtUrl))
+      self.theGraph.add_node(pydot.Node(objtName,shape='rectangle',margin=0,style='filled',fillcolor='white',fontname=self.fontName,fontsize=self.fontSize,URL=objtUrl))
+    elif (dimName == 'trust_boundary'):
+      objtUrl = 'trust_boundary#' + objtName
+      self.theGraph.add_node(pydot.Node(objtName,shape='rectangle',margin=0,fillcolor='white',fontname=self.fontName,fontsize=self.fontSize,URL=objtUrl))
     else:
       raise UnknownNodeType(dimName)
 
@@ -75,19 +70,7 @@ class DataFlowDiagram:
       nodeNameSet = set([])
       edgeSet = set([])
 
-      tbses = self.dbProxy.getTrustBoundaries()
-      for tbs in tbses:
-        tbName = tbs.theName
-        c = pydot.Cluster(tbName,label=str(tbName),style='dashed',fontname=self.fontName,fontsize=self.fontSize)
-        self.theClusters[tbName] = c
-        self.theGraph.add_subgraph(c)
-        try:
-          for tbType,tbComponent in tbs.components()[self.theEnvironmentName]:
-            self.tbDict[tbComponent] = tbName
-        except KeyError:
-          pass
-
-      for dfName,fromName,fromType,toName,toType in self.theAssociations:
+      for dfName,fromName,fromType,toName,toType,dfType in self.theAssociations:
 
         if (fromName not in nodeNameSet):
           self.buildNode(fromType,fromName)
@@ -99,7 +82,7 @@ class DataFlowDiagram:
 
         if ((fromName,toName) not in edgeSet):
           objtUrl = 'dataflow#' + dfName + '#' + self.theEnvironmentName
-          df = pydot.Edge(fromName,toName,dir='forward',label=dfName,arrowhead='vee',fontname=self.fontName,fontsize=self.fontSize,URL=objtUrl)
+          df = pydot.Edge(fromName,toName,dir='forward',label=dfName,arrowhead='vee',color=edgeColour(dfType), fontname=self.fontName,fontsize=self.fontSize,fontcolor=edgeColour(dfType),URL=objtUrl)
           self.theGraph.add_edge(df)
       return self.layout()
     except DatabaseProxyException as errTxt:

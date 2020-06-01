@@ -20,20 +20,26 @@ from .ObjectCreationParameters import ObjectCreationParameters
 __author__ = 'Shamal Faily'
 
 class DataFlowParameters(ObjectCreationParameters):
-  def __init__(self,dfName,envName,fromName,fromType,toName,toType,dfAssets):
+  def __init__(self,dfName,dfType,envName,fromName,fromType,toName,toType,dfAssets,dfObs = [],dfTags = []):
     ObjectCreationParameters.__init__(self)
     self.theName = dfName
+    self.theType = dfType
     self.theEnvironmentName = envName
     self.theFromName = fromName
     self.theFromType = fromType
     self.theToName = toName
     self.theToType = toType
     self.theAssets = dfAssets
+    self.theObstacles = dfObs
+    self.theTags = dfTags
 
   def name(self): return self.theName
+  def type(self): return self.theType
   def environment(self): return self.theEnvironmentName
   def fromName(self): return self.theFromName
   def fromType(self): return self.theFromType
   def toName(self): return self.theToName
   def toType(self): return self.theToType
   def assets(self): return self.theAssets
+  def obstacles(self): return self.theObstacles
+  def tags(self): return self.theTags

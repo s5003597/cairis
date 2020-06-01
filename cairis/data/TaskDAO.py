@@ -39,9 +39,9 @@ __author__ = 'Shamal Faily'
 class TaskDAO(CairisDAO):
 
   def __init__(self, session_id):
-    CairisDAO.__init__(self, session_id)
+    CairisDAO.__init__(self, session_id, 'task')
 
-  def get_tasks(self, constraint_id=-1):
+  def get_objects(self, constraint_id=-1):
     try:
       tasks = self.db_proxy.getTasks(constraint_id)
     except DatabaseProxyException as ex:
@@ -57,7 +57,7 @@ class TaskDAO(CairisDAO):
       taskList.append(self.simplify(tasks[key]))
     return taskList
 
-  def get_task_by_name(self, name, simplify=True):
+  def get_object_by_name(self, name, simplify=True):
     try:
       taskId = self.db_proxy.getDimensionId(name,'task')
       tasks = self.db_proxy.getTasks(taskId)
@@ -76,7 +76,7 @@ class TaskDAO(CairisDAO):
     found_task = self.simplify(found_task)
     return found_task
 
-  def add_task(self, task):
+  def add_object(self, task):
     task_params = TaskParameters(
       tName=task.name(),
       tSName=task.shortCode(),
@@ -100,7 +100,7 @@ class TaskDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def update_task(self, task, name):
+  def update_object(self, task, name):
     task_params = TaskParameters(
       tName=task.name(),
       tSName=task.shortCode(),
@@ -121,7 +121,7 @@ class TaskDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def delete_task(self, name):
+  def delete_object(self, name):
     try:
       taskId = self.db_proxy.getDimensionId(name,'task')
       self.db_proxy.deleteTask(taskId)
@@ -233,8 +233,13 @@ class TaskDAO(CairisDAO):
       raise MissingParameterHTTPError(param_names=['real_props', 'fake_props'])
     return new_props
 
-  def get_task_model(self, environment_name,task_name,misusecase_name):
+  def get_task_model(self, environment_name,task_name,misusecase_name, pathValues = []):
     fontName, fontSize, apFontName = get_fonts(session_id=self.session_id)
+    if task_name == 'all':  
+      task_name = ''
+    if misusecase_name == 'all': 
+       misusecase_name = ''
+
     try:
       mcFilter = False
       filter_name = task_name
@@ -254,7 +259,7 @@ class TaskDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def task_score_by_name_environment(self,task_name,environment_name):
+  def task_score_by_name_environment(self,task_name,environment_name, pathValues = []):
     try:
       return self.db_proxy.taskUsabilityScore(task_name,environment_name)
     except DatabaseProxyException as ex:
@@ -264,7 +269,7 @@ class TaskDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def task_load_by_name_environment(self,task_name,environment_name):
+  def task_load_by_name_environment(self,task_name,environment_name,pathValues = []):
     try:
       taskId = self.db_proxy.getDimensionId(task_name,'task')
       envId = self.db_proxy.getDimensionId(environment_name,'environment')
@@ -276,7 +281,7 @@ class TaskDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def task_hindrance_by_name_environment(self,task_name,environment_name):
+  def task_hindrance_by_name_environment(self,task_name,environment_name, pathValues = []):
     try:
       taskId = self.db_proxy.getDimensionId(task_name,'task')
       envId = self.db_proxy.getDimensionId(environment_name,'environment')
@@ -288,8 +293,10 @@ class TaskDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def get_misusability_model(self, mc_name,tc_name):
+  def get_misusability_model(self, mc_name,tc_name, pathValues = []):
     fontName, fontSize, apFontName = get_fonts(session_id=self.session_id)
+    if tc_name == 'all':
+      tc_name = ''
     try:
       associations = self.db_proxy.assumptionTaskModel(mc_name,tc_name)
       model = GraphicalAssumptionTaskModel(associations,db_proxy=self.db_proxy, font_name=fontName, font_size=fontSize)

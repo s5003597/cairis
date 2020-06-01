@@ -81,13 +81,30 @@
          "thePostconditions" : "Researcher app has session"}
       ]}
   ],
+  "obstacles": [
+    {"theName": "Desktop installation",
+     "theOriginator": "Anon",
+     "theEnvironmentProperties": [
+       "Psychosis",
+       "Psychosis-1",
+       "Desktop malware directly installed on PC via removable media",
+       "Confidentiality Threat"
+     ]}
+  ],
   "dataflows" : [
     {"theName" : "authenticate",
+     "theType" : "Information",
      "theEnvironmentName" : "Psychosis",
      "theFromName" : "Authorised Researcher",
      "theFromType" : "entity",
      "theToName" : "Authenticate Researcher",
      "theToType" : "process",
-     "theAssets" : ["Credentials"]}
+     "theAssets" : ["Credentials"],
+     "theObstacles" : [
+        {"theName" : "Desktop installation",
+         "theKeyword" : "not applicable",
+         "theContext" : "not applicable"}
+      ],
+     "theTags" : ["tag1"]}
   ]
 }

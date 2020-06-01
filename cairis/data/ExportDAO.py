@@ -27,9 +27,10 @@ __author__ = 'Shamal Faily'
 class ExportDAO(CairisDAO):
 
   def __init__(self, session_id):
-    CairisDAO.__init__(self, session_id)
+    CairisDAO.__init__(self, session_id, 'export')
 
-  def file_export(self,fileType='xml'):
+  def file_export(self,pathValues):
+    fileType = pathValues[1]
     try:
       if (fileType == 'xml'):
         return extractModel(self.session_id)
@@ -39,21 +40,21 @@ class ExportDAO(CairisDAO):
       self.close()
       raise ARMHTTPError(ex)
 
-  def architectural_pattern_export(self,apName):
+  def architectural_pattern_export(self,apName, pathValues = []):
     try:
       return self.db_proxy.architecturalPatternToXml(apName);
     except DatabaseProxyException as ex:
       self.close()
       raise ARMHTTPError(ex)
 
-  def security_patterns_export(self):
+  def security_patterns_export(self,pathValues = []):
     try:
       return self.db_proxy.securityPatternsToXml();
     except DatabaseProxyException as ex:
       self.close()
       raise ARMHTTPError(ex)
 
-  def grl_export(self,taskName,personaName,envName):
+  def grl_export(self,taskName,personaName,envName, pathValues = []):
     try:
       return self.db_proxy.pcToGrl(personaName,taskName,envName);
     except DatabaseProxyException as ex:

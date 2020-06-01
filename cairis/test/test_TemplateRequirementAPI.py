@@ -123,13 +123,15 @@ class TemplateRequirementAPITests(CairisDaemonTestCase):
     json_resp = json_deserialize(responseData)
     self.assertIsNotNone(json_resp, 'No results after deserialization')
     ackMsg = json_resp.get('message', None)
-    self.assertEqual(ackMsg, 'Template Requirement successfully added')
+    self.assertGreater(ackMsg.find('created'), -1, 'Template requirement not created')
 
   def test_put(self):
     method = 'test_put'
     self.new_tr_dict['object'].theDefinition = 'Updated definition'
+    updDict = self.new_tr_dict
+    updDict['object'].theName = 'Updated TR'
     url = '/api/template_requirements/name/%s?session_id=test' % quote(self.existing_tr_name)
-    rv = self.app.put(url, content_type='application/json', data=jsonpickle.encode(self.new_tr_dict))
+    rv = self.app.put(url, content_type='application/json', data=jsonpickle.encode(updDict))
     if (sys.version_info > (3,)):
       responseData = rv.data.decode('utf-8')
     else:
@@ -138,7 +140,7 @@ class TemplateRequirementAPITests(CairisDaemonTestCase):
     json_resp = json_deserialize(responseData)
     self.assertIsNotNone(json_resp, 'No results after deserialization')
     ackMsg = json_resp.get('message', None)
-    self.assertEqual(ackMsg, 'Template Requirement successfully updated')
+    self.assertGreater(ackMsg.find('updated'), -1, 'Template requirement not updated')
 
   def test_delete(self):
     method = 'test_delete'
@@ -162,4 +164,4 @@ class TemplateRequirementAPITests(CairisDaemonTestCase):
     json_resp = json_deserialize(responseData)
     self.assertIsNotNone(json_resp, 'No results after deserialization')
     ackMsg = json_resp.get('message', None)
-    self.assertEqual(ackMsg, 'Template Requirement successfully deleted')
+    self.assertGreater(ackMsg.find('deleted'), -1, 'Template requirement not deleted')

@@ -49,7 +49,9 @@ class DataFlowAPITests(CairisDaemonTestCase):
     self.existing_from_type = 'entity'
     self.existing_to_name = 'Authenticate Researcher'
     self.existing_to_type = 'process'
+    self.existing_type = 'Information'
     self.existing_assets = ['Credentials']
+    self.existing_tags = []
 
     dataflow_class = DataFlow.__module__+'.'+DataFlow.__name__
     # endregion
@@ -81,11 +83,13 @@ class DataFlowAPITests(CairisDaemonTestCase):
     dataflow = jsonpickle.decode(responseData)
     self.assertIsNotNone(dataflow, 'No results after deserialization')
     self.assertEqual(dataflow['theName'],self.existing_dataflow_name)
+    self.assertEqual(dataflow['theType'],self.existing_type)
     self.assertEqual(dataflow['theEnvironmentName'],self.existing_environment_name)
     self.assertEqual(dataflow['theFromName'],self.existing_from_name)
     self.assertEqual(dataflow['theFromType'],self.existing_from_type)
     self.assertEqual(dataflow['theToName'],self.existing_to_name)
     self.assertEqual(dataflow['theToType'],self.existing_to_type)
+    self.assertEqual(dataflow['theTags'],self.existing_tags)
 
   def test_post(self):
     method = 'test_post'
@@ -141,11 +145,13 @@ class DataFlowAPITests(CairisDaemonTestCase):
     self.assertIsNotNone(upd_dataflow, 'Unable to decode JSON data')
 
     self.assertEqual(upd_dataflow['theName'],dataflow_to_update.name())
+    self.assertEqual(upd_dataflow['theType'],dataflow_to_update.type())
     self.assertEqual(upd_dataflow['theEnvironmentName'],dataflow_to_update.environment())
     self.assertEqual(upd_dataflow['theFromName'],dataflow_to_update.fromName())
     self.assertEqual(upd_dataflow['theFromType'],dataflow_to_update.fromType())
     self.assertEqual(upd_dataflow['theToName'],dataflow_to_update.toName())
     self.assertEqual(upd_dataflow['theToType'],dataflow_to_update.toType())
+    self.assertEqual(upd_dataflow['theTags'],dataflow_to_update.tags())
 
     rv = self.app.delete('/api/dataflows/name/Edited%20test%20dataflow/environment/Psychosis?session_id=test')
     self.assertIsNotNone(rv.data, 'No response')
@@ -155,7 +161,7 @@ class DataFlowAPITests(CairisDaemonTestCase):
       responseData = rv.data
     json_resp = jsonpickle.decode(responseData)
     self.assertIsNotNone(json_resp)
-    self.assertEqual(json_resp['message'],'Edited test dataflow deleted')
+    self.assertEqual(json_resp['message'],'Edited test dataflow / Psychosis deleted')
 
   def test_dataflow_diagram(self):
     url = '/api/dataflows/diagram/environment/Psychosis/filter_type/None/filter_name/None?session_id=test'
@@ -170,16 +176,31 @@ class DataFlowAPITests(CairisDaemonTestCase):
     self.assertIsNotNone(responseData, 'No results after deserialization')
     self.assertEqual(responseData.find('svg'),1)
 
+  def test_control_structure(self):
+    url = '/api/dataflows/control_structure/environment/Psychosis/filter_name/None?session_id=test'
+    method = 'test_control_structure'
+    self.logger.info('[%s] URL: %s', method, url)
+    rv = self.app.get(url, content_type='application/json')
+    if (sys.version_info > (3,)):
+      responseData = rv.data.decode('utf-8')
+    else:
+      responseData = rv.data
+    self.logger.debug('[%s] Response data: %s', method, responseData)
+    self.assertIsNotNone(responseData, 'No results after deserialization')
+
 
   def prepare_new_dataflow(self):
     new_dataflow = DataFlow(
       dfName='acknowledge',
+      dfType='Information',
       envName='Psychosis',
       fromName='Authenticate Researcher',
       fromType='process',
       toName='Authorised Researcher',
       toType='entity',
-      dfAssets=['Session']
+      dfAssets=['Session'],
+      dfObs=[{'theObstacleName':'XSS Exploit','theKeyword':'not applicable','theContext':'Not applicable'}],
+      dfTags=['tag1']
     )
     return new_dataflow
 

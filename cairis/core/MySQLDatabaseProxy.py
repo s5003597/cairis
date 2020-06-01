@@ -294,7 +294,7 @@ class MySQLDatabaseProxy:
     self.updateDatabase('call addCompositeEnvironmentProperties(:id,:dp,:oe)',{'id':environmentId,'dp':duplicateProperty,'oe':overridingEnvironment},'MySQL error adding duplicate properties for environment id ' + str(environmentId),session,False)
 
   def riskEnvironments(self,threatName,vulName):
-    return self.responseList('call riskEnvironments(:threat,:vul)',{'threat':threatName,'vul':vulName},'MySQL error getting environments associated with threat ' + threatName + ' and vulnerability ' + vulName)
+    return self.responseList('call riskEnvironments(:thr,:vul)',{'thr':threatName,'vul':vulName},'MySQL error getting environments associated with threat ' + threatName + ' and vulnerability ' + vulName)
 
   def riskEnvironmentsByRisk(self,riskName):
     return self.responseList('call riskEnvironmentsByRisk(:risk)',{'risk':riskName},'MySQL error getting environments associated with risk ' + riskName)
@@ -319,9 +319,12 @@ class MySQLDatabaseProxy:
   def deleteRequirement(self,r):
     self.deleteObject(r,'requirement')
     
-  def responseList(self,callTxt,argDict,errorTxt):
+  def responseList(self,callTxt,argDict,errorTxt,session = None):
     try:
-      session = self.conn()
+      persistSession = True
+      if (session == None):
+        session = self.conn()
+        persistSession = False
       rs = session.execute(callTxt,argDict)
       responseList = []
       if (rs.rowcount > 0):
@@ -331,7 +334,8 @@ class MySQLDatabaseProxy:
           else:
             responseList.append(list(row)[0])
       rs.close()
-      session.close()
+      if (persistSession == False):
+        session.close()
       return responseList
     except OperationalError as e:
       exceptionText = 'MySQL error calling ' + callTxt + ' (message:' + format(e) + ')'
@@ -444,7 +448,6 @@ class MySQLDatabaseProxy:
     attackerDesc = parameters.description()
     attackerImage = parameters.image()
     tags = parameters.tags()
-
     self.updateDatabase("call updateAttacker(:id,:name,:desc,:image)",{'id':attackerId,'name':attackerName,'desc':attackerDesc,'image':attackerImage},'MySQL error updating attacker',session)
     self.addTags(attackerName,'attacker',tags)
     for environmentProperties in parameters.environmentProperties():
@@ -3531,9 +3534,14 @@ class MySQLDatabaseProxy:
       bis.append('None')
     return bis
 
-  def environmentRequirements(self,envName): return self.responseList('call requirementNames(:env)',{'env':envName},'MySQL error getting requirements associated with environment ' + envName)
+  def environmentRequirements(self,envName): 
+    return self.responseList('call requirementNames(:env)',{'env':envName},'MySQL error getting requirements associated with environment ' + envName)
 
-  def deleteTags(self,tagObjt,tagDim): self.updateDatabase('call deleteTags(:obj,:dim)',{'obj':tagObjt,'dim':tagDim},'MySQL error deleting tags')
+  def deleteTags(self,tagObjt,tagDim): 
+    self.updateDatabase('call deleteTags(:obj,:dim)',{'obj':tagObjt,'dim':tagDim},'MySQL error deleting tags')
+
+  def deleteDataFlowTags(self,dfName,fromType,fromName,toType,toName,envName): 
+    self.updateDatabase('call deleteDataFlowTags(:dfName, :fromType, :fromName, :toType, :toName, :envName)',{'dfName' : dfName, 'fromType' : fromType, 'fromName' : fromName, 'toType' : toType, 'toName' : toName, 'envName' : envName},'MySQL error deleting data flow tags')
 
   def addTags(self,dimObjt,dimName,tags):
     self.deleteTags(dimObjt,dimName)
@@ -3547,8 +3555,23 @@ class MySQLDatabaseProxy:
         raise DatabaseProxyException('MySQL error adding ' + dimName + ' ' + dimObjt + ' tag ' + tag + ': ' + format(e))
     curs.close()
 
+  def addDataFlowTags(self,dfName,fromType,fromName,toType,toName,envName,tags):
+    self.deleteDataFlowTags(dfName,fromType,fromName,toType,toName,envName)
+    curs = self.conn.connection().connection.cursor()
+    for tag in set(tags):
+      try:
+        curs.execute('call addDataFlowTag(%s,%s,%s,%s,%s,%s,%s)',[dfName,fromType,fromName,toType,toName,envName,tag])
+      except OperationalError as e:
+        raise DatabaseProxyException('MySQL error adding dataflow tag (message: ' + format(e))
+      except DatabaseError as e:
+        raise DatabaseProxyException('MySQL error adding dataflow tag ' + tag + ': ' + format(e))
+    curs.close()
+
   def getTags(self,dimObjt,dimName):
     return self.responseList('call getTags(:obj,:name)',{'obj':dimObjt,'name':dimName},'MySQL error getting tags')
+
+  def getDataFlowTags(self,dfName,fromType,fromName,toType,toName,envName):
+    return self.responseList('call getDataFlowTags(:dfName,:fromType,:fromName,:toType,:toName,:envName)',{'dfName':dfName,'fromType':fromType,'fromName':fromName,'toType':toType,'toName':toName,'envName':envName},'MySQL error getting data flow tags')
 
   def deleteTag(self,tagId): self.deleteObject(tagId,'tag')
     
@@ -4647,9 +4670,11 @@ class MySQLDatabaseProxy:
   def getDataFlows(self,dfName='',envName=''):
     dfRows = self.responseList('call getDataFlows(:df,:env)',{'df':dfName,'env':envName},'MySQL error getting data flows')
     dataFlows = []
-    for dfName,envName,fromName,fromType,toName,toType in dfRows:
+    for dfName,dfType,envName,fromName,fromType,toName,toType in dfRows:
+      tags = self.getDataFlowTags(dfName,fromType,fromName,toType,toName,envName)
       dfAssets = self.getDataFlowAssets(dfName,envName)
-      parameters = DataFlowParameters(dfName,envName,fromName,fromType,toName,toType,dfAssets)
+      dfObs = self.getDataFlowObstacles(dfName,envName)
+      parameters = DataFlowParameters(dfName,dfType,envName,fromName,fromType,toName,toType,dfAssets,dfObs,tags)
       df = ObjectFactory.build(-1,parameters)
       dataFlows.append(df)
     return dataFlows
@@ -4657,33 +4682,54 @@ class MySQLDatabaseProxy:
   def getDataFlowAssets(self,dfName,envName):
     return self.responseList('call getDataFlowAssets(:df,:env)',{'df':dfName,'env':envName},'MySQL error getting assets for data flow ' + dfName)
 
+  def getDataFlowObstacles(self,dfName,envName):
+    return self.responseList('call getDataFlowObstacles(:df,:env)',{'df':dfName,'env':envName},'MySQL error getting obstacles for data flow ' + dfName)
+
+
   def addDataFlow(self,parameters):
     dfName = parameters.name()
+    dfType = parameters.type()
     envName = parameters.environment()
     fromName = parameters.fromName()
     fromType = parameters.fromType()
     toName = parameters.toName()
     toType = parameters.toType()
     dfAssets = parameters.assets()
-    self.updateDatabase('call addDataFlow(:df,:env,:fName,:fType,:tName,:tType)',{'df':dfName,'env':envName,'fName':fromName,'fType':fromType,'tName':toName,'tType':toType},'MySQL error adding data flow')
+    dfObs = parameters.obstacles()
+    tags = parameters.tags()
+    self.updateDatabase('call addDataFlow(:df,:dfType,:env,:fName,:fType,:tName,:tType)',{'df':dfName,'dfType':dfType,'env':envName,'fName':fromName,'fType':fromType,'tName':toName,'tType':toType},'MySQL error adding data flow')
+    self.addDataFlowTags(dfName,fromType,fromName,toType,toName,envName,tags)
     for dfAsset in dfAssets:
       self.addDataFlowAsset(dfName,envName,fromType,fromName,toType,toName,dfAsset)
+    for dfOb in dfObs:
+      self.addDataFlowObstacle(dfName,envName,fromType,fromName,toType,toName,dfOb)
 
   def addDataFlowAsset(self,dfName,envName,fromType,fromName,toType,toName,dfAsset):
     self.updateDatabase('call addDataFlowAsset(:df,:env,:fromType,:fromName,:toType,:toName,:ass)',{'df':dfName,'env':envName,'fromType':fromType,'fromName':fromName,'toType':toType,'toName':toName,'ass':dfAsset},'MySQL error adding data flow asset')
 
+  def addDataFlowObstacle(self,dfName,envName,fromType,fromName,toType,toName,dfOb):
+    obsName,kwd,dfoContext = dfOb
+    self.updateDatabase('call addDataFlowObstacle(:df,:env,:fromType,:fromName,:toType,:toName,:ob,:kwd,:dfoContext)',{'df':dfName,'env':envName,'fromType':fromType,'fromName':fromName,'toType':toType,'toName':toName,'ob':obsName,'kwd':kwd,'dfoContext':dfoContext},'MySQL error adding data flow obstacle')
+
   def updateDataFlow(self,oldDfName,oldEnvName,parameters):
     dfName = parameters.name()
+    dfType = parameters.type()
     envName = parameters.environment()
     fromName = parameters.fromName()
     fromType = parameters.fromType()
     toName = parameters.toName()
     toType = parameters.toType()
     dfAssets = parameters.assets()
+    dfObs = parameters.obstacles()
+    tags = parameters.tags()
     session = self.updateDatabase('call deleteDataFlowAssets(:df,:env)',{'df':oldDfName,'env':oldEnvName},'MySQL error deleting data flow assets',None,False)
-    self.updateDatabase('call updateDataFlow(:oDf,:nDf,:oEnv,:nEnv,:fName,:fType,:tName,:tType)',{'oDf':oldDfName,'nDf':dfName,'oEnv':oldEnvName,'nEnv':envName,'fName':fromName,'fType':fromType,'tName':toName,'tType':toType},'MySQL error updating data flow',session)
+    self.updateDatabase('call deleteDataFlowObstacles(:df,:env)',{'df':oldDfName,'env':oldEnvName},'MySQL error deleting data flow obstacles',session,False)
+    self.updateDatabase('call updateDataFlow(:oDf,:nDf,:dfType,:oEnv,:nEnv,:fName,:fType,:tName,:tType)',{'oDf':oldDfName,'nDf':dfName,'dfType':dfType,'oEnv':oldEnvName,'nEnv':envName,'fName':fromName,'fType':fromType,'tName':toName,'tType':toType},'MySQL error updating data flow',session)
+    self.addDataFlowTags(dfName,fromType,fromName,toType,toName,envName,tags)
     for dfAsset in dfAssets:
       self.addDataFlowAsset(dfName,envName,fromType,fromName,toType,toName,dfAsset)
+    for dfOb in dfObs:
+      self.addDataFlowObstacle(dfName,envName,fromType,fromName,toType,toName,dfOb)
 
   def deleteDataFlow(self,dfName,envName):
     self.updateDatabase('call deleteDataFlow(:df,:env)',{'df':dfName,'env':envName},'MySQL Error deleting data flow')
@@ -4699,13 +4745,14 @@ class MySQLDatabaseProxy:
   def getTrustBoundaries(self,constraintId = -1):
     tbRows = self.responseList('call getTrustBoundaries(:id)',{'id':constraintId},'MySQL error getting trust boundaries')
     tbs = [] 
-    for tbId,tbName,tbDesc in tbRows:
+    for tbId,tbName,tbType,tbDesc in tbRows:
+      tags = self.getTags(tbName,'trust_boundary')
       components = {}
       privileges = {}
       for environmentId,environmentName in self.dimensionEnvironments(tbId,'trust_boundary'):
         components[environmentName] = self.trustBoundaryComponents(tbId,environmentId)
         privileges[environmentName] = self.trustBoundaryPrivilege(tbId,environmentId)
-      tbs.append(TrustBoundary(tbId,tbName,tbDesc,components,privileges))
+      tbs.append(TrustBoundary(tbId,tbName,tbType,tbDesc,components,privileges,tags))
     return tbs
 
   def trustBoundaryComponents(self,tbId, envId):
@@ -4716,7 +4763,8 @@ class MySQLDatabaseProxy:
 
   def addTrustBoundary(self,tb):
     tbId = self.newId()
-    self.updateDatabase("call addTrustBoundary(:id,:name,:desc)",{'id':tbId,'name':tb.name(),'desc':tb.description()},'MySQL error adding trust boundary ' + str(tbId))
+    self.updateDatabase("call addTrustBoundary(:id,:name,:type,:desc)",{'id':tbId,'name':tb.name(),'type':tb.type(),'desc':tb.description()},'MySQL error adding trust boundary ' + str(tbId))
+    self.addTags(tb.name(),'trust_boundary',tb.tags())
     defaultPrivilegeLevels = {}
     for environmentName in list(tb.components().keys()):
       defaultPrivilegeLevels[environmentName] = 'None'
@@ -4738,7 +4786,8 @@ class MySQLDatabaseProxy:
 
   def updateTrustBoundary(self,tb):
     self.updateDatabase('call deleteTrustBoundaryComponents(:id)',{'id':tb.id()},'MySQL error deleting trust boundary components for ' + tb.name())
-    self.updateDatabase("call updateTrustBoundary(:id,:name,:desc)",{'id':tb.id(),'name':tb.name(),'desc':tb.description()},'MySQL error adding trust boundary ' + tb.name())
+    self.updateDatabase("call updateTrustBoundary(:id,:name,:type,:desc)",{'id':tb.id(),'name':tb.name(),'type':tb.type(),'desc':tb.description()},'MySQL error adding trust boundary ' + tb.name())
+    self.addTags(tb.name(),'trust_boundary',tb.tags())
     defaultPrivilegeLevels = {}
     for environmentName in list(tb.components().keys()):
       defaultPrivilegeLevels[environmentName] = 'None'
@@ -4773,6 +4822,7 @@ class MySQLDatabaseProxy:
 
   def modelValidation(self,envName):
     objtRows = self.responseList('call modelValidation(:envName)',{'envName':envName},'MySQL error validating model')
+    objtRows += self.responseList('call taintFlowAnalysis(:envName)',{'envName':envName},'MySQL error validating model')
     rows = []
     for lbl,msg in objtRows:
       rows.append(ValidationResult(lbl,msg))
@@ -4950,3 +5000,6 @@ class MySQLDatabaseProxy:
 
   def userGoalSystemGoals(self,ugId):
     return self.responseList('call userGoalSystemGoals(:ugId)',{'ugId':ugId},'MySQL error getting user goal system goals')
+
+  def controlStructure(self,envName,filterElement = ''):
+    return self.responseList('call controlStructure(:env,:fe)',{'env':envName,'fe':filterElement},'MySQL error getting control structure')

@@ -299,7 +299,7 @@
 <!ATTLIST obstacle originator CDATA #REQUIRED>
 <!ELEMENT obstacle_environment (definition,concern*,probability?)>
 <!ATTLIST obstacle_environment name CDATA #REQUIRED>
-<!ATTLIST obstacle_environment category (Confidentiality_Threat | Integrity_Threat | Availability_Threat | Accountability_Threat | Vulnerability | Duration | Frequency | Demands | Goal_Support | Anonymity_Threat | Pseudonymity_Threat | Unlinkability_Threat | Unobservability_Threat | Threat ) #REQUIRED>
+<!ATTLIST obstacle_environment category (Confidentiality_Threat | Integrity_Threat | Availability_Threat | Accountability_Threat | Vulnerability | Duration | Frequency | Demands | Goal_Support | Anonymity_Threat | Pseudonymity_Threat | Unlinkability_Threat | Unobservability_Threat | Threat | Loss | Hazard ) #REQUIRED>
 <!ELEMENT probability (rationale)>
 <!ATTLIST probability value CDATA #REQUIRED>
 
@@ -363,7 +363,7 @@
 
 <!ELEMENT manual_association EMPTY>
 <!ATTLIST manual_association from_name CDATA #REQUIRED>
-<!ATTLIST manual_association from_dim (requirement | task | asset | domainproperty | usecase | response | countermeasure) #REQUIRED>
+<!ATTLIST manual_association from_dim (requirement | task | asset | domainproperty | usecase | response | countermeasure | document_reference) #REQUIRED>
 <!ATTLIST manual_association to_name CDATA #REQUIRED>
 <!ATTLIST manual_association to_dim (requirement | task | asset | vulnerability | role | usecase | goal | countermeasure) #REQUIRED>
 <!ATTLIST manual_association label CDATA #IMPLIED>
@@ -437,8 +437,9 @@
 <!ATTLIST task_characteristic modal_qualifier CDATA #REQUIRED>
 
 <!ELEMENT dataflows (dataflow*,trust_boundary*)>
-<!ELEMENT dataflow (dataflow_asset+)>
+<!ELEMENT dataflow (tag*,dataflow_asset+,dataflow_obstacle*)>
 <!ATTLIST dataflow name CDATA #REQUIRED>
+<!ATTLIST dataflow type (Information  | Control | Feedback) #IMPLIED>
 <!ATTLIST dataflow environment CDATA #REQUIRED>
 <!ATTLIST dataflow from_name CDATA #REQUIRED>
 <!ATTLIST dataflow from_type (entity | process | datastore) #REQUIRED>
@@ -448,8 +449,15 @@
 <!ELEMENT dataflow_asset EMPTY>
 <!ATTLIST dataflow_asset name CDATA #REQUIRED>
 
-<!ELEMENT trust_boundary (description,trust_boundary_environment+)>
+<!ELEMENT dataflow_obstacle (context)>
+<!ATTLIST dataflow_obstacle name CDATA #REQUIRED>
+<!ATTLIST dataflow_obstacle keyword (does not provide | provides | provides too early | provides too late | provides out of order | stopped too soon | applied too long | not applicable) #REQUIRED>
+<!ELEMENT context (#PCDATA)>
+
+
+<!ELEMENT trust_boundary (description,tag*,trust_boundary_environment+)>
 <!ATTLIST trust_boundary name CDATA #REQUIRED>
+<!ATTLIST trust_boundary type (Controller | Controlled Process | Sensor | Actuator | General) #IMPLIED>
 <!ATTLIST trust_boundary privilege CDATA #IMPLIED>
 <!ELEMENT trust_boundary_environment (trust_boundary_component+)>
 <!ATTLIST trust_boundary_environment name CDATA #REQUIRED>
